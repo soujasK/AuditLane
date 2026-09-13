@@ -1,0 +1,7 @@
+{
+  "_comment": "Copy to phonebook.json and replace with your real org directory. Never commit real phone numbers. Names must be lowercase to match how the extractor normalizes them.",
+  "sarah": "+15550001111",
+  "@sarah_dba": "+15550001111",
+  "the architect": "+15550002222",
+  "the security lead": "+15550003333"
+}

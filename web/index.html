@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuditLine — Verification Ledger</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="style.css?v=4">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Minimal Top Navigation -->
+    <header class="top-nav">
+      <div class="nav-left">
+        <div class="brand">
+          <span class="brand-mark">AuditLine</span>
+          <span class="brand-badge">VERIFICATION LEDGER</span>
+        <nav class="nav-links">
+          <button class="nav-tab active" data-view="dashboard">Audits</button>
+          <button class="nav-tab" data-view="telephony-sudo">telephony-sudo</button>
+          <button class="nav-tab" data-view="live-sandbox">Voice Sandbox</button>
+        </nav>
+        </nav>
+      </div>
+      <div class="nav-right">
+        <div class="system-status">
+          <span class="status-dot"></span>
+          <span>DRESS REHEARSAL &bull; CI GATING ACTIVE</span>
+        </div>
+        <button id="btn-open-audit-modal" class="btn btn-primary">
+          Audit Pull Request
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Body -->
+    <main class="main-content">
+      
+      <!-- ===================================================================
+           VIEW 1: AUDIT LEDGER (DASHBOARD)
+           =================================================================== -->
+      <section id="view-dashboard" class="view-section active">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1>Pull Request Verification Ledger</h1>
+            <p>Cryptographic record of verbal authorization claims extracted from PRs and verified via CALL-E telephony.</p>
+          </div>
+          <div class="metric-summary" style="display: flex; gap: 16px; font-family: var(--font-mono); font-size: 11px;">
+            <div><span style="color: var(--text-muted)">TOTAL AUDITED:</span> <strong id="metric-total">0</strong></div>
+            <div><span style="color: #79c99e">VERIFIED:</span> <strong id="metric-verified">0</strong></div>
+            <div><span style="color: #e07466">BLOCKED:</span> <strong id="metric-blocked">0</strong></div>
+            <div><span style="color: #e2b350">NEEDS REVIEW:</span> <strong id="metric-review">0</strong></div>
+          </div>
+        </div>
+
+        <div class="controls-bar">
+          <div class="search-input-wrapper">
+            <input type="text" id="search-input" class="search-input" placeholder="Search by repo, PR, authorizer, or claim keyword...">
+          </div>
+          <div class="filter-group">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="BLOCKED">Blocked</button>
+            <button class="filter-btn" data-filter="VERIFIED">Verified</button>
+            <button class="filter-btn" data-filter="NEEDS_HUMAN_REVIEW">Needs Review</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="ledger-table">
+            <thead>
+              <tr>
+                <th style="width: 140px;">Verdict</th>
+                <th style="width: 220px;">Repo & PR</th>
+                <th>Extracted Claim Summary</th>
+                <th style="width: 160px;">Authorizer</th>
+                <th style="width: 80px;">Hops</th>
+                <th style="width: 140px;">Timestamp</th>
+                <th style="width: 90px; text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="audit-table-body">
+              <!-- Dynamically rendered -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           VIEW 2: PR DETAIL / VERIFICATION TIMELINE
+           =================================================================== -->
+      <section id="view-detail" class="view-section">
+        <div class="back-bar">
+          <button id="btn-back-to-ledger" class="btn-link">
+            &larr; Return to Verification Ledger
+          </button>
+        </div>
+
+        <!-- Pinned Verdict Banner -->
+        <div id="detail-verdict-banner" class="verdict-banner">
+          <div class="verdict-main">
+            <span id="detail-verdict-badge" class="badge"></span>
+            <div>
+              <div id="detail-verdict-title" class="verdict-title"></div>
+              <div id="detail-verdict-sub" class="verdict-sub"></div>
+            </div>
+          </div>
+          <div id="detail-merge-status" style="font-family: var(--font-mono); font-size: 12px; font-weight: 600;"></div>
+        </div>
+
+        <!-- Metadata Bar -->
+        <div class="verdict-meta-grid">
+          <div class="meta-item">
+            <div class="meta-label">PR Reference</div>
+            <div id="detail-meta-pr" class="meta-value">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Commit SHA</div>
+            <div id="detail-meta-sha" class="meta-value">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Policy Decision Rule</div>
+            <div id="detail-meta-policy" class="meta-value">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Entailment Engine</div>
+            <div id="detail-meta-engine" class="meta-value">-</div>
+          </div>
+        </div>
+
+        <!-- PR Description Raw Snippet -->
+        <div style="margin-bottom: 24px;">
+          <div class="section-label">PR Submission Content</div>
+          <div id="detail-pr-body" class="claim-block" style="color: var(--text-secondary);"></div>
+        </div>
+
+        <!-- Voice-to-Diff Healing Section (when authorizer provided verbal amendments) -->
+        <div id="detail-healing-container" style="display: none;"></div>
+
+        <!-- Cryptographic Voice Attestation Receipt -->
+        <div id="detail-attestation-container" style="display: none;"></div>
+
+        <!-- Vertical Stepper Hops -->
+        <div>
+          <div class="section-label">Telephony Audit Trail & Entailment Trace <span class="badge badge-verified">ACTIVE</span></div>
+          <svg id="delegationGraph" class="node-graph-svg" width="100%" height="120" style="margin: 16px 0; background: rgba(10,12,16,0.5); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); display: none;"></svg>
+          <div id="detail-hops-container" class="timeline-stepper">
+            <!-- Rendered per hop -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           VIEW: telephony-sudo (AGENT CLI COMMAND INTERCEPTOR)
+           =================================================================== -->
+      <section id="view-telephony-sudo" class="view-section">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1>telephony-sudo — Agent CLI Sandbox Interceptor</h1>
+            <p>2-Factor Telephony Authentication for autonomous agents (Claude Code, Devin, Cursor) executing high-blast-radius terminal commands.</p>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 360px 1fr; gap: 20px; margin-bottom: 24px;">
+          <div class="soc-card">
+            <div class="card-title">Interception Dispatcher</div>
+            <div class="card-desc">Simulate an agent attempting a privileged CLI command.</div>
+
+            <div class="form-group">
+              <label class="form-label" for="sudo-preset">Select Danger Preset</label>
+              <select id="sudo-preset" class="form-control">
+                <option value="drop-table">DROP DATABASE prod_accounts;</option>
+                <option value="terraform-destroy">terraform destroy -auto-approve</option>
+                <option value="aws-delete-role">aws iam delete-role --role-name admin</option>
+                <option value="custom">Custom Command...</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="sudo-cmd">Terminal Command</label>
+              <input type="text" id="sudo-cmd" class="form-control" value="DROP DATABASE prod_accounts;">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="sudo-authorizer">Required Authorizer</label>
+              <select id="sudo-authorizer" class="form-control">
+                <option value="@sarah_dba" selected>@sarah_dba (Staff DBA - Denies)</option>
+                <option value="The architect">The architect (Systems Architect - Confirms)</option>
+                <option value="Random Person">Random Person (Unregistered - Fails Closed)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="sudo-reason">Action Justification</label>
+              <input type="text" id="sudo-reason" class="form-control" value="Migration cleanup of legacy shard">
+            </div>
+
+            <button id="btn-run-sudo" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+              Execute via telephony-sudo
+            </button>
+          </div>
+
+          <div class="terminal-window">
+            <div class="terminal-header">
+              <div class="terminal-dot dot-red"></div>
+              <div class="terminal-dot dot-yellow"></div>
+              <div class="terminal-dot dot-green"></div>
+              <span class="terminal-title">BASH / AGENT TOOL RUNNER</span>
+              <span id="sudo-term-status" style="margin-left: auto; color: #10B981;">READY</span>
+            </div>
+            <div id="sudo-terminal-output" class="terminal-body">
+              <div class="term-muted"># Autonomous agent environment initialized (Claude Code / Devin)...</div>
+              <div class="term-muted"># Type or select a command and click 'Execute via telephony-sudo' to test.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           VIEW: LIVE VOICE SANDBOX (DIAL MY PHONE)
+           =================================================================== -->
+      <section id="view-live-sandbox" class="view-section">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1>Live Telephony Sandbox — Test with Your Real Phone</h1>
+            <p>Experience real-time CALL-E verification live. Enter your phone number and CALL-E will dial you within 5 seconds.</p>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 420px 1fr; gap: 24px;">
+          <div class="soc-card">
+            <div class="card-title">Live Call Dispatcher</div>
+            <div class="card-desc">CALL-E calls your phone with the forensic free-recall interrogation.</div>
+
+            <div class="form-group">
+              <label class="form-label" for="sandbox-name">Your Name / Title</label>
+              <input type="text" id="sandbox-name" class="form-control" value="Hackathon Judge">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="sandbox-phone">Your E.164 Phone Number</label>
+              <input type="tel" id="sandbox-phone" class="form-control" placeholder="+1xxxxxxxxxx">
+              <small style="color: var(--text-muted); font-size: 10px; margin-top: 4px; display: block;">
+                Must include country code, e.g. +14155550192 or +91xxxxxxxxxx.
+              </small>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="sandbox-claim">Simulated Agent Claim to Verify</label>
+              <textarea id="sandbox-claim" class="form-control" rows="3">Confirmed with Hackathon Judge during standup that deploying AuditLine to production is approved.</textarea>
+            </div>
+
+            <button id="btn-trigger-live-call" class="btn btn-primary" style="width: 100%; margin-top: 8px;">
+              Call My Phone Now via CALL-E
+            </button>
+          </div>
+
+          <div class="soc-card">
+            <div class="card-title" style="display: flex; justify-content: space-between;">
+              Live Interrogation Stream
+              <span style="font-family: var(--font-mono); font-size: 10px; color: var(--accent-primary);">00:00.000 / LIVE</span>
+            </div>
+            <div class="card-desc">Real-time status of the telephony session, audio hash, and NLI entailment.</div>
+
+            <div id="sandbox-stream-log" class="claim-block" style="min-height: 240px; font-size: 11px; line-height: 1.8; position: relative;">
+              <div class="waveform-container" style="position: absolute; bottom: 10px; left: 10px; width: 380px;">
+                <canvas id="waveformCanvas" width="380" height="64"></canvas>
+              </div>
+              <span id="sandbox-status-text" style="color: var(--text-muted); position: relative; z-index: 2;">Awaiting live call dispatch trigger...</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           VIEW 3: PHONEBOOK / ORG DIRECTORY
+           =================================================================== -->
+      <section id="view-phonebook" class="view-section">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1>Organization Directory & Authorizer Phonebook</h1>
+            <p>Verified contact directory. AuditLine never dials numbers parsed from PR text to avoid spoofing.</p>
+          </div>
+          <button id="btn-add-contact" class="btn btn-secondary btn-sm">
+            Add Directory Contact
+          </button>
+        </div>
+
+        <div class="table-container">
+          <table class="ledger-table">
+            <thead>
+              <tr>
+                <th>Authorizer Name / Alias</th>
+                <th>Designated Role</th>
+                <th>Department</th>
+                <th>E.164 Phone Number</th>
+                <th>Last Audit Call</th>
+                <th>Status</th>
+                <th style="text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="directory-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           VIEW 4: SETTINGS / CONFIGURATION
+           =================================================================== -->
+      <section id="view-settings" class="view-section">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1>Verification Engine Configuration</h1>
+            <p>Operational parameters, fail-closed thresholds, and CALL-E credentials.</p>
+          </div>
+          <button id="btn-save-settings" class="btn btn-primary btn-sm">Save Changes</button>
+        </div>
+
+        <div class="settings-grid">
+          <div class="soc-card">
+            <div class="card-title">Telephony Backend</div>
+            <div class="card-desc">CALL-E API connection and simulation flags.</div>
+
+            <div class="toggle-switch">
+              <div>
+                <strong style="font-size: 12px;">Dress Rehearsal Mode</strong>
+                <p style="font-size: 11px; color: var(--text-secondary);">Simulates calls via deterministic test fixture bank (zero real phone calls).</p>
+              </div>
+              <input type="checkbox" id="setting-dress-rehearsal" checked>
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;">
+              <label class="form-label" for="setting-api-key">CALL_E_API_KEY</label>
+              <input type="password" id="setting-api-key" class="form-control" value="••••••••••••••••••••••••••••••••">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-call-timeout">Max Call Duration (Seconds)</label>
+              <input type="number" id="setting-call-timeout" class="form-control" value="180">
+            </div>
+          </div>
+
+          <div class="soc-card">
+            <div class="card-title">Decision Policy & Safety</div>
+            <div class="card-desc">Fail-closed gate parameters and NLI entailment logic.</div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-max-hops">Max Hop Limit (Chain Traversal)</label>
+              <input type="number" id="setting-max-hops" class="form-control" value="3">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="setting-engine">Entailment Engine</label>
+              <select id="setting-engine" class="form-control">
+                <option value="heuristic-v1" selected>HeuristicEntailmentEngine (Offline, lexical overlap)</option>
+                <option value="roberta-large-mnli">TransformerEntailmentEngine (RoBERTa-large-MNLI)</option>
+              </select>
+            </div>
+
+            <div class="toggle-switch">
+              <div>
+                <strong style="font-size: 12px;">Fail-Closed Ambiguity Default</strong>
+                <p style="font-size: 11px; color: var(--text-secondary);">Route any unreachable number or low-confidence response to NEEDS_HUMAN_REVIEW.</p>
+              </div>
+              <input type="checkbox" checked disabled>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           VIEW 5: SPECIFICATION & COMPLIANCE DOCS
+           =================================================================== -->
+      <section id="view-docs" class="view-section">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1>Architecture & Compliance Specification</h1>
+            <p>Technical reference for verbal-authorization verification in CI/CD pipelines.</p>
+          </div>
+        </div>
+
+        <div class="doc-content">
+          <h2>1. The Problem Space: Undocumented Verbal Claims</h2>
+          <p>
+            Autonomous coding agents (Devin, SWE-agent, OpenHands) push commits and open PRs with claims of informal human approval (e.g. <code>"As confirmed with @sarah_dba during standup, this is safe to drop the legacy v1_accounts table"</code>).
+          </p>
+          <p>
+            Static linters, automated tests, and CI/CD pipelines only check code diffs and digital artifacts. Because verbal authorizations have no digital audit trail, telephony verification of the named person is the only viable out-of-band verification mechanism.
+          </p>
+
+          <h2>2. Interrogation Methodology: Free Recall First</h2>
+          <p>
+            The CALL-E telephony prompt uses a forensic interview structure:
+          </p>
+          <pre>1. Disclose call context: Automated change-control audit for repository.
+2. Request unprompted recall: "What did you discuss about the accounts table today?"
+3. Conditional claim confrontation: Only read back specific agent claims if unprompted recall does not address it.</pre>
+          <p>
+            Leading with <em>"Did you approve X?"</em> produces a reflexive confirmation bias. Free recall isolates confabulations and fabricated authorization.
+          </p>
+
+          <h2>3. GitHub Actions Integration Snippet</h2>
+          <pre><code>name: AuditLine
+on: [pull_request]
+jobs:
+  verify-claims:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit verbal authorization
+        run: |
+          python scripts/run_verification.py \
+            --title "${{ github.event.pull_request.title }}" \
+            --body "${{ github.event.pull_request.body }}" \
+            --pr-ref "${{ github.repository }}#${{ github.event.pull_request.number }}" \
+            --post-to-github</code></pre>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ===================================================================
+         AUDIT PULL REQUEST MODAL
+         =================================================================== -->
+    <div id="audit-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Run Pull Request Verification</h3>
+          <button id="btn-close-modal" class="btn-link" style="font-size: 16px;">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="modal-preset">Load Sample Scenario</label>
+            <select id="modal-preset" class="form-control">
+              <option value="custom">Custom Input...</option>
+              <option value="sarah-denial">Scenario 1: Agent claims Sarah cleared table drop (Denied -> Blocked)</option>
+              <option value="architect-multihop">Scenario 2: Architect cleared schema change (Multi-hop -> Verified)</option>
+              <option value="unknown-person">Scenario 3: Unregistered person approved key rotation (Missing Phone -> Review)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="modal-repo-pr">Repository & PR Reference</label>
+            <input type="text" id="modal-repo-pr" class="form-control" value="acme-corp/core-infra#482">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="modal-pr-title">PR Title</label>
+            <input type="text" id="modal-pr-title" class="form-control" value="Drop legacy v1_accounts table across shards">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="modal-pr-body">PR Description / Body</label>
+            <textarea id="modal-pr-body" class="form-control">As confirmed with @sarah_dba during standup, this is safe to drop the legacy table.</textarea>
+          </div>
+
+          <div id="modal-live-status" style="display: none; padding: 12px; background-color: var(--bg-primary); border: 1px solid var(--border-hairline); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 11px;">
+            <div style="color: var(--accent-gold); margin-bottom: 4px;">[AUDIT EXECUTION IN PROGRESS]</div>
+            <div id="modal-status-text" style="color: var(--text-secondary);">Extracting claims from PR text...</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-cancel-modal" class="btn btn-secondary">Cancel</button>
+          <button id="btn-execute-audit" class="btn btn-primary">Execute Verification</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js?v=4"></script>
+</body>
+</html>

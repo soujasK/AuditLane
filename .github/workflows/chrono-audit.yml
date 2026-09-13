@@ -1,0 +1,29 @@
+name: auditline
+
+# Runs on every PR. Defaults to dress-rehearsal mode (no real calls, no
+# CALL-E key required) unless AUDITLINE_DRESS_REHEARSAL=false is set
+# as a repository variable AND CALLE_API_KEY is present as a secret.
+# See docs/SAFETY.md before ever flipping this to live.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  verify-verbal-authorization-claims:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run AuditLine Action
+        uses: ./
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          calle_api_key: ${{ secrets.CALLE_API_KEY }}
+          dress_rehearsal: ${{ vars.AUDITLINE_DRESS_REHEARSAL || 'true' }}
+          phonebook_path: phonebook.json

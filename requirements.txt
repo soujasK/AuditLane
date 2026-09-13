@@ -1,0 +1,10 @@
+# Core — required for the default (dress rehearsal + heuristic entailment) path.
+requests>=2.31.0
+pytest>=7.4
+
+# Telephony integration
+calle-ai>=0.7.0
+
+# Optional — only needed for the higher-quality TransformerEntailmentEngine.
+# Requires network access to download model weights:
+#   pip install transformers torch

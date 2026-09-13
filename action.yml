@@ -1,0 +1,36 @@
+name: 'AuditLine Verification Ledger'
+description: 'Audits PRs against a phonebook and verifies verbal authorization claims via telephony.'
+branding:
+  icon: 'phone-call'
+  color: 'blue'
+inputs:
+  github_token:
+    description: 'GitHub token for posting PR comments and status checks'
+    required: true
+  calle_api_key:
+    description: 'Telephony API key (Bland AI)'
+    required: true
+  dress_rehearsal:
+    description: 'If true, skips live calls and simulates deterministic verifications'
+    required: false
+    default: 'true'
+  phonebook_path:
+    description: 'Path to the phonebook JSON relative to workspace'
+    required: false
+    default: 'phonebook.json'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  env:
+    GITHUB_TOKEN: ${{ inputs.github_token }}
+    GITHUB_REPOSITORY: ${{ github.repository }}
+    CALLE_API_KEY: ${{ inputs.calle_api_key }}
+    AUDITLINE_DRESS_REHEARSAL: ${{ inputs.dress_rehearsal }}
+  args:
+    - --github-event
+    - ${{ github.event_path }}
+    - --pr-ref
+    - ${{ github.repository }}#${{ github.event.pull_request.number }}
+    - --phonebook
+    - ${{ inputs.phonebook_path }}
+    - --post-to-github
