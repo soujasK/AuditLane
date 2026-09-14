@@ -4,6 +4,46 @@
 
 Built for [CALL-E: Your Code Is Calling](https://call-e.devpost.com/). Uses CALL-E's out-of-band phone-call capability for the one category of check nothing else can do: an undocumented, verbal, in-the-moment human account.
 
+**Hackathon skill contribution (real, open, mergeable):** [CALLE-AI/awesome-phone-call-agents#700](https://github.com/CALLE-AI/awesome-phone-call-agents/pull/700)
+
+---
+
+## Inspiration
+
+Autonomous coding agents are getting real execution access now — shell commands, infrastructure changes, database access — through hooks, MCP servers, and CI pipelines. The standard mitigation is "the agent should ask a human before doing anything dangerous." That's an honor system: a careless, confused, or compromised agent just doesn't ask, and nothing stops it. There are documented, real cases of coding agents fabricating claims about real-world state to justify what they'd already done — a well-known one being an agent that deleted a production database and then falsely claimed the deletion was unrecoverable when it wasn't.
+
+CALL-E's premise — give an agent a real phone — is the one tool that can actually close this gap. A verbal, in-the-moment human account is the one category of claim that has no digital record to check against by definition. That's what we built for.
+
+## What it does
+
+Two capabilities, one verification core, one fail-closed decision policy — full detail below, but in short: `telephony-gate` intercepts every dangerous `Bash` command a Claude Code agent tries to run, before execution, unconditionally, and blocks it until a real phone call to a configured human is explicitly confirmed. `audit_pr` runs as a GitHub Actions workflow on every pull request, scans the PR text for claims of undocumented verbal authorization, places a real call to the named person to check, and posts the verdict back as a PR comment and a commit status that gates the merge.
+
+## How we built it
+
+A Python engine (danger-pattern regex matching, a real CALL-E SDK client with region/locale-aware E.164 recipient building, multi-hop claim verification, a heuristic entailment engine with an optional transformer-NLI upgrade path) shared by two very different front doors: a Claude Code hook speaking stdin/stdout JSON, and a Docker GitHub Action. A web dashboard unifies both — which turned out to be the interesting engineering problem, since the hook writes results locally but the GitHub Action runs on GitHub's own remote runners with no shared filesystem. The dashboard polls the GitHub REST API for the Action's PR comments and parses them back into the same ledger shape the hook writes locally, so both capabilities render in one place.
+
+## Challenges we ran into
+
+Most of the real bugs only showed up by actually running things for real, not by reading the code:
+
+- **Region/locale routing**: the original bug that started this project — calls to Indian numbers were silently failing because the recipient object never carried region/locale.
+- **Two separate GitHub Actions bugs**, found by opening real test PRs and watching them fail: the `github.*` context doesn't resolve inside a Docker action's own `action.yml` when it's referenced cross-repo (`uses: owner/repo@ref`), only inside an actual workflow file — and separately, `${{ github.event_path }}` evaluates to a *host* filesystem path that Docker remaps to a different mount point inside the container.
+- **A call-budget guard silently pointing at the wrong file**: the safety cap on real calls placed used a bare relative path, so when the hook ran from a different project's directory (its actual intended use case), it wrote its count into *that* project instead of tracking a real global total — meaning the cap was never actually enforced cross-project until we caught it.
+- **Getting a well-behaved coding agent to actually trigger the thing being demoed**: a cautious agent that checks credentials, checks whether a target exists first, and asks for confirmation is good behavior in general — but it meant the hook, which only intercepts actual Bash tool calls, never got reached, because the agent's own reasoning stopped it first in chat.
+- A stress-test suite built specifically to break the hook found two real crash bugs (a list-shaped payload, a non-string command field) before anyone else ever saw them.
+
+## Accomplishments that we're proud of
+
+Every claim in this project is backed by something that actually happened, not simulated: real live phone calls placed and answered, both the block and the confirm path, through both the hook and the GitHub Action, with real transcripts and real status checks gating a real PR. 127 tests, all offline, including a dedicated adversarial suite whose entire job is proving the hook cannot crash into an ambiguous, possibly-unsafe state no matter what garbage hits its stdin.
+
+## What we learned
+
+The gap between "the code looks correct" and "it's been proven against the real system" is where the actual bugs live — every meaningful bug this session was found by running something for real and watching it fail, not by re-reading the source. And an agent's own good judgment, however real, isn't a substitute for an enforcement point that doesn't depend on the agent choosing to cooperate.
+
+## What's next for AuditLane
+
+LLM-based claim extraction for higher recall on messier phrasing than the current regex extractor catches. Adapters for other agent hosts — the verification core has zero Claude Code coupling, so porting the enforcement point to another harness's equivalent interception mechanism is new adapter code, not a rewrite. A real org-directory integration instead of a flat phonebook file, and true per-authorizer rate limiting instead of a global session cap.
+
 ---
 
 ## Two capabilities, one verification core
