@@ -1,5 +1,5 @@
-from auditline.entailment import HeuristicEntailmentEngine
-from auditline.models import EntailmentLabel
+from auditlane.entailment import HeuristicEntailmentEngine
+from auditlane.models import EntailmentLabel
 
 
 def make_engine():

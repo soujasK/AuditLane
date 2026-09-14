@@ -26,10 +26,10 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from auditline.attestation import create_voice_attestation, save_attestation
-from auditline.calle_client import CalleVerificationClient
-from auditline.config import Config
-from auditline.models import Claim, Confirmation
+from auditlane.attestation import create_voice_attestation, save_attestation
+from auditlane.calle_client import CalleVerificationClient
+from auditlane.config import Config
+from auditlane.models import Claim, Confirmation
 
 
 CHALLENGE_WORDS = ["Obsidian", "Cobalt", "Falcon", "Meridian", "Zephyr", "Apex", "Vanguard", "Genesis"]

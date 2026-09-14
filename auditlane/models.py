@@ -80,7 +80,7 @@ class HopResult:
     # NOTE: these are raw signals, not the final policy decision. The
     # entailment confidence threshold is a config value, not a property
     # of the data itself, so the threshold check lives in verifier.py —
-    # see ChronoAuditor._audit_claim_chain.
+    # see AuditLaneVerifier._audit_claim_chain.
 
     @property
     def authorizer_denied(self) -> bool:
@@ -118,7 +118,7 @@ class VerificationOutcome:
     suggested_patch: Optional[str] = None
 
     def to_markdown(self) -> str:
-        lines = [f"### AuditLine verdict: `{self.verdict.value.upper()}`", "", self.reason, ""]
+        lines = [f"### AuditLane verdict: `{self.verdict.value.upper()}`", "", self.reason, ""]
         for i, hop in enumerate(self.hops):
             lines.append(f"**Hop {i} — {hop.claim.authorizer_name}**")
             lines.append(f"- Claim: \"{hop.claim.claim_text}\"")

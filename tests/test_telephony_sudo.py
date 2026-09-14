@@ -22,7 +22,7 @@ def test_telephony_sudo_blocks_denied_authorizer():
     ]
     import os
     env = dict(os.environ)
-    env["AUDITLINE_DRESS_REHEARSAL"] = "true"
+    env["AUDITLANE_DRESS_REHEARSAL"] = "true"
     proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
     assert proc.returncode == 1
     assert "ACCESS DENIED" in proc.stderr
@@ -45,7 +45,7 @@ def test_telephony_sudo_permits_confirmed_authorizer():
     ]
     import os
     env = dict(os.environ)
-    env["AUDITLINE_DRESS_REHEARSAL"] = "true"
+    env["AUDITLANE_DRESS_REHEARSAL"] = "true"
     proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
     assert proc.returncode == 0
     assert "AUTHORIZATION GRANTED" in proc.stdout

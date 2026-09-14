@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from auditline.attestation import (
+from auditlane.attestation import (
     create_voice_attestation,
     save_attestation,
     load_attestation,

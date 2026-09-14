@@ -1,8 +1,8 @@
-from auditline.calle_client import CalleVerificationClient
-from auditline.config import Config
-from auditline.entailment import HeuristicEntailmentEngine
-from auditline.models import Verdict
-from auditline.verifier import ChronoAuditor
+from auditlane.calle_client import CalleVerificationClient
+from auditlane.config import Config
+from auditlane.entailment import HeuristicEntailmentEngine
+from auditlane.models import Verdict
+from auditlane.verifier import AuditLaneVerifier
 
 PHONEBOOK = {
     "sarah": "+15550001111",
@@ -15,7 +15,7 @@ PHONEBOOK = {
 def make_auditor(mock_responder=None, max_hops=2):
     config = Config(dress_rehearsal=True, max_hops=max_hops)
     calle_client = CalleVerificationClient(config=config, mock_responder=mock_responder)
-    return ChronoAuditor(
+    return AuditLaneVerifier(
         config=config,
         calle_client=calle_client,
         entailment_engine=HeuristicEntailmentEngine(),

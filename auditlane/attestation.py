@@ -1,5 +1,5 @@
 """
-Cryptographic Voice Attestation Protocol for AuditLine.
+Cryptographic Voice Attestation Protocol for AuditLane.
 
 Generates and verifies tamper-proof receipts for telephony author approvals.
 Links Git commits and PR branches cryptographically to CALL-E telephony sessions,
@@ -19,8 +19,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-DEFAULT_ATTESTATION_DIR = Path(".git") / "auditline" / "attestations"
-ATTESTATION_SECRET = os.getenv("AUDITLINE_ATTESTATION_SECRET", "auditline-genesis-secret-key-2026")
+DEFAULT_ATTESTATION_DIR = Path(".git") / "auditlane" / "attestations"
+ATTESTATION_SECRET = os.getenv("AUDITLANE_ATTESTATION_SECRET", "auditlane-genesis-secret-key-2026")
 
 
 @dataclass

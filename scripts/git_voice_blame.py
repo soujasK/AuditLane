@@ -15,12 +15,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Ensure auditline is in path
+# Ensure auditlane is in path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from auditline.attestation import load_attestation, VoiceAttestation
+from auditlane.attestation import load_attestation, VoiceAttestation
 
 
 def print_voice_attestation_card(attest: VoiceAttestation, line_info: str = ""):
@@ -28,7 +28,7 @@ def print_voice_attestation_card(attest: VoiceAttestation, line_info: str = ""):
     sig_badge = "[CRYPTOGRAPHIC SIGNATURE: VALID]" if sig_valid else "[WARNING: INVALID SIGNATURE]"
 
     print("=" * 72)
-    print(f" AuditLine VOICE PROVENANCE RECORD {line_info}")
+    print(f" AuditLane VOICE PROVENANCE RECORD {line_info}")
     print("=" * 72)
     print(f" Commit SHA          : {attest.commit_sha}")
     print(f" Pull Request        : {attest.pr_reference}")

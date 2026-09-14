@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.git
+.pytest_cache
+__pycache__
+*.pyc
+scratch
+upstream_repo
+.github
+phonebook.json
+.auditlane_call_budget.json
+.auditlane_ledger.json

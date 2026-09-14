@@ -8,7 +8,7 @@ Autonomous coding agents fabricating claims about real-world state is a
 documented, recent failure category (a Replit agent deleted a production
 database and falsely claimed the deletion was unrecoverable; an AWS
 engineer's coding agent resolved a production issue without required
-peer approval). AuditLine targets a specific, narrow slice of that
+peer approval). AuditLane targets a specific, narrow slice of that
 problem — claims of *verbal, undocumented* human authorization — that
 has no existing digital-artifact check, because none exists to check
 against.
@@ -30,7 +30,7 @@ something else."
   the specific claim is read back — see `calle_client.build_task_prompt`).
 - Multi-hop chains are followed for real: a confirmed hop that itself
   references a second authorizer triggers a second live call, up to a
-  configurable limit (`auditline/verifier.py`).
+  configurable limit (`auditlane/verifier.py`).
 - The entailment engine is a genuine, separate decision component (not
   another LLM call) with real logic, tested behavior, and a documented
   upgrade path to a pretrained NLI model.
@@ -47,6 +47,6 @@ something else."
 `python demo/dress_rehearsal.py` runs three complete scenarios
 (blocked, verified via a two-hop chain, deferred to human review) in
 under a second, with no setup beyond `pip install -r requirements.txt`.
-The GitHub Action (`.github/workflows/auditline.yml`) shows the
+The GitHub Action (`.github/workflows/auditlane.yml`) shows the
 real integration point: every PR gets a verdict as a comment and a
 commit status, gating the merge without requiring any custom UI.

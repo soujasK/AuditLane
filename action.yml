@@ -1,4 +1,4 @@
-name: 'AuditLine Verification Ledger'
+name: 'AuditLane Verification Ledger'
 description: 'Audits PRs against a phonebook and verifies verbal authorization claims via telephony.'
 branding:
   icon: 'phone-call'
@@ -8,7 +8,7 @@ inputs:
     description: 'GitHub token for posting PR comments and status checks'
     required: true
   calle_api_key:
-    description: 'Telephony API key (Bland AI)'
+    description: 'CALL-E telephony API key'
     required: true
   dress_rehearsal:
     description: 'If true, skips live calls and simulates deterministic verifications'
@@ -25,7 +25,7 @@ runs:
     GITHUB_TOKEN: ${{ inputs.github_token }}
     GITHUB_REPOSITORY: ${{ github.repository }}
     CALLE_API_KEY: ${{ inputs.calle_api_key }}
-    AUDITLINE_DRESS_REHEARSAL: ${{ inputs.dress_rehearsal }}
+    AUDITLANE_DRESS_REHEARSAL: ${{ inputs.dress_rehearsal }}
   args:
     - --github-event
     - ${{ github.event_path }}

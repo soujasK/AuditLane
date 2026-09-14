@@ -1,7 +1,7 @@
-name: auditline
+name: auditlane
 
 # Runs on every PR. Defaults to dress-rehearsal mode (no real calls, no
-# CALL-E key required) unless AUDITLINE_DRESS_REHEARSAL=false is set
+# CALL-E key required) unless AUDITLANE_DRESS_REHEARSAL=false is set
 # as a repository variable AND CALLE_API_KEY is present as a secret.
 # See docs/SAFETY.md before ever flipping this to live.
 
@@ -20,10 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run AuditLine Action
+      - name: Run AuditLane Action
         uses: ./
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           calle_api_key: ${{ secrets.CALLE_API_KEY }}
-          dress_rehearsal: ${{ vars.AUDITLINE_DRESS_REHEARSAL || 'true' }}
+          dress_rehearsal: ${{ vars.AUDITLANE_DRESS_REHEARSAL || 'true' }}
           phonebook_path: phonebook.json

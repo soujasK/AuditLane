@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/hooks/pretooluse_telephony_gate.py\"",
+            "timeout": 300,
+            "statusMessage": "Checking command against telephony-gate danger patterns..."
+          }
+        ]
+      }
+    ]
+  }
+}

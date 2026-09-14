@@ -1,4 +1,4 @@
-from auditline.claim_extractor import extract_claims, extract_claims_from_pr
+from auditlane.claim_extractor import extract_claims, extract_claims_from_pr
 
 
 def test_extracts_at_mention_after_confirmed_with():

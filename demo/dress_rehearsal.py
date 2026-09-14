@@ -6,7 +6,7 @@ Run this to see the whole pipeline end to end with zero setup:
 
 No CALLE_API_KEY, no network access, and no real phone calls are made —
 CalleVerificationClient stays in dress-rehearsal mode and answers from
-the fixture bank in auditline/calle_client.py. This is exactly what
+the fixture bank in auditlane/calle_client.py. This is exactly what
 a judge should be able to run cold to see the project work.
 
 It runs three scenarios back to back:
@@ -22,8 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from auditline.config import Config  # noqa: E402
-from auditline.verifier import ChronoAuditor  # noqa: E402
+from auditlane.config import Config  # noqa: E402
+from auditlane.verifier import AuditLaneVerifier  # noqa: E402
 
 PHONEBOOK = {
     "sarah": "+15550001111",
@@ -42,7 +42,7 @@ def run_scenario(title: str, pr_title: str, pr_body: str) -> None:
     print("-" * 72)
 
     config = Config(dress_rehearsal=True)
-    auditor = ChronoAuditor(config=config, phonebook=PHONEBOOK)
+    auditor = AuditLaneVerifier(config=config, phonebook=PHONEBOOK)
     outcome = auditor.audit_pr(pr_reference="demo#1", title=pr_title, body=pr_body)
 
     print(outcome.to_markdown())
@@ -74,7 +74,7 @@ def main() -> None:
 
     print("=" * 72)
     print("All three scenarios ran with zero API keys and zero real phone calls.")
-    print("Switch AUDITLINE_DRESS_REHEARSAL=false + a real CALLE_API_KEY")
+    print("Switch AUDITLANE_DRESS_REHEARSAL=false + a real CALLE_API_KEY")
     print("to place real calls. Read docs/SAFETY.md first.")
     print("=" * 72)
 

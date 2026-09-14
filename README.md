@@ -1,64 +1,84 @@
-# AuditLine
+# AuditLane
 
-**Before an autonomous coding agent's claim of human approval gets trusted, call the human it claims approved it — and check if their story matches.**
+**Before an autonomous agent runs a dangerous command, or before its claim of human approval gets trusted, call the human — and check if their story actually matches.**
 
-Built for [CALL-E: Your Code Is Calling](https://call-e.devpost.com/). Uses CALL-E's out-of-band phone-call capability to verify the one category of claim that has no digital record to check against by definition: undocumented, verbal authorization.
+Built for [CALL-E: Your Code Is Calling](https://call-e.devpost.com/). Uses CALL-E's out-of-band phone-call capability for the one category of check nothing else can do: an undocumented, verbal, in-the-moment human account.
 
 ---
 
-## The problem
+## Two capabilities, one verification core
+
+**`telephony-gate`** — a Claude Code `PreToolUse` hook. Every `Bash` command an agent tries to run passes through it *before execution*, unconditionally — the agent has no code path that skips it. If the command matches a dangerous pattern (`DROP TABLE`, `rm -rf`, `terraform destroy`, `curl | bash`, force-push, and 18 others — see `auditlane/danger_patterns.py`), execution is blocked until a real, live phone call to a configured human is explicitly confirmed.
+
+**`audit_pr`** — the original capability. Scans a PR's title/body for claims of undocumented verbal authorization ("confirmed with X", "the architect verbally cleared this"), places a call to the named person, compares their statement against the claim, and returns `verified`, `blocked`, or `needs_human_review`.
+
+Both share the same engine (`auditlane/calle_client.py`, `auditlane/verifier.py`) and the same fail-closed decision policy — see below.
+
+## The problem `telephony-gate` solves
+
+The common mitigation for "agent about to do something dangerous" is "the agent should ask a human first." That's an honor system — a careless, confused, or compromised agent just doesn't ask, and nothing stops it. `telephony-gate`'s actual contribution isn't the phone call, it's *where the gate lives*: installed as a hook, it sits in the harness's own execution path instead of depending on the agent's cooperation.
+
+## The problem `audit_pr` solves
 
 Autonomous coding agents (Devin, SWE-agent, OpenHands, and friends) increasingly push commits and open PRs directly. Sometimes their commit messages or PR descriptions claim a human authorized something informally:
 
 > "As confirmed with @sarah_dba during standup, this is safe to drop the legacy `v1_accounts` table across regional shards."
 
-That claim might be true. It might also be a confabulation — agents have been documented fabricating claims about real-world state before, including a well-known case where a coding agent deleted a production database and then falsely claimed the deletion was unrecoverable when it wasn't.
+That claim might be true. It might also be a confabulation — agents have been documented fabricating claims about real-world state before, including a well-known case where a coding agent deleted a production database and then falsely claimed the deletion was unrecoverable when it wasn't. Static linters and CI can't check this kind of claim — there's no ticket, no Slack message, no git blame for a hallway conversation. By definition, the only way to verify it is to ask the person.
 
-Static linters and CI can't check this kind of claim. There is no ticket, no Slack message, no git blame for a hallway conversation — by definition, the only way to verify it is to ask the person.
-
-## Why this can only be telephony
-
-Every other category of "agent claim" (tests passed, a file was written, a commit has a SHA) has a digital artifact to check against. A *verbal, undocumented* claim of authorization has none — that's what makes it a hallway conversation instead of a ticket. A phone call to the named person is the only out-of-band channel that can check it.
-
-## What it does
+## What happens end to end
 
 ```
-PR text
-   │  (rule-based extraction, zero external calls — see auditline/claim_extractor.py)
-   ▼
-Claim("Sarah", "confirmed dropping v1_accounts is fine", ...)
-   │  (CALL-E: client.calls.create_and_wait — see auditline/calle_client.py)
-   ▼
-CallResult(statement="No — we agreed to keep it...", direct_confirmation="denied")
-   │  (entailment engine compares claim vs. statement — see auditline/entailment.py)
-   ▼
-HopResult(contradiction=True)
-   │
-   ▼
-Verdict: BLOCKED — PR comment posted, merge gated
+telephony-gate:
+  Bash command --danger_patterns.py--> match?
+     │                                    │
+     │ no                                 │ yes
+     ▼                                    ▼
+   runs untouched              CALL-E calls the configured authorizer
+                                          │  free-recall interview, then verdict
+                                          ▼
+                              allow (confirmed) / deny (denied, unreachable,
+                              no config, no phone on file, internal error —
+                              every one of these denies, never allows by default)
+
+audit_pr:
+  PR text --regex extraction--> Claim("Sarah", "confirmed dropping v1_accounts", ...)
+     │
+     ▼
+  CALL-E calls Sarah --> CallResult(statement="No — we agreed to keep it...", denied)
+     │
+     ▼
+  entailment engine compares claim vs. statement --> HopResult(contradiction=True)
+     │
+     ▼
+  Verdict: BLOCKED — PR comment posted, merge gated
 ```
 
-If the claim itself references a second person's approval ("I was told by the security lead it was fine"), AuditLine follows the chain — calling that person too, up to `AUDITLINE_MAX_HOPS` hops — before deciding.
+If a claim references a second person's approval ("I was told by the security lead it was fine"), `audit_pr` follows the chain — calling that person too, up to `AUDITLANE_MAX_HOPS` hops — before deciding.
 
-**Decision policy is deliberately simple and fails closed:**
-- Any hop the authorizer denies, or that scores as a confident contradiction → **BLOCKED**
-- Every hop confirmed with confident agreement, chain fully resolved → **VERIFIED**
-- Anything else — unreachable, no phone on file, hedge/low confidence, chain too long → **NEEDS_HUMAN_REVIEW**
+**Decision policy, identical for both capabilities, deliberately simple and fails closed:**
+- Denial, or a confident contradiction → **BLOCKED** / denied
+- Confirmed with confident agreement (every hop, for `audit_pr`) → **VERIFIED** / allowed
+- Anything else — unreachable, no phone on file, hedge/low confidence, chain too long, misconfigured, internal error → **NEEDS_HUMAN_REVIEW** / denied
 
-It never auto-merges on ambiguity. Uncertainty always routes to a human, never to a guess.
+It never proceeds on ambiguity. Uncertainty always routes to a human, never to a guess — verified with a dedicated crash-resistance test suite (`tests/test_hook_robustness.py`), not just claimed: malformed input, missing config, wrong types, unexpected shapes all deny cleanly, none of them crash into an ambiguous non-zero exit.
 
 ### The interrogation method
 
-The CALL-E prompt asks for **open, unprompted recall first** ("what did you discuss about the accounts table today?"), and only reads back the specific claim if the open answer doesn't already address it. Leading with "the agent says you approved this, right?" invites a reflexive yes — this is the same free-recall-before-recognition principle used in real witness-interview practice, and it's what actually catches a fabricated claim. See `calle_client.build_task_prompt()`.
+The CALL-E prompt asks for **open, unprompted recall first** ("what did you discuss about the accounts table today?" / "what did you approve regarding this command?"), and only reads back the specific claim if the open answer doesn't already address it. Leading with "the agent says you approved this, right?" invites a reflexive yes — this is the same free-recall-before-recognition principle used in real witness-interview practice, and it's what actually catches a fabricated claim. See `calle_client.build_task_prompt()`.
 
 ## Where the ML is genuinely load-bearing
 
-`auditline/entailment.py` implements the judgment call that decides BLOCKED vs. VERIFIED vs. defer-to-human — this isn't a bolted-on feature, it's the thing that makes the pipeline's output auditable and consistent rather than "another LLM call whose reasoning might drift."
+`auditlane/entailment.py` implements the judgment call that decides BLOCKED vs. VERIFIED vs. defer-to-human for `audit_pr` — this isn't a bolted-on feature, it's the thing that makes the pipeline's output auditable and consistent rather than "another LLM call whose reasoning might drift."
 
 - **`HeuristicEntailmentEngine`** (default): zero dependencies, zero downloads, fully offline — negation- and lexical-overlap-based. This is what tests, CI, and the dress-rehearsal demo use, on purpose, so the whole project is judgeable without any external API access.
-- **`TransformerEntailmentEngine`** (optional): a pretrained NLI model (e.g. `roberta-large-mnli`) via `transformers`, for production-grade entailment quality. Requires `pip install transformers torch` and network access to download weights — not assumed available in every environment, so it's opt-in, not default. Swap it in by passing `entailment_engine=TransformerEntailmentEngine()` to `ChronoAuditor`.
+- **`TransformerEntailmentEngine`** (optional): a pretrained NLI model (e.g. `roberta-large-mnli`) via `transformers`, for production-grade entailment quality. Requires `pip install transformers torch` and network access to download weights — not assumed available in every environment, so it's opt-in, not default. Swap it in by passing `entailment_engine=TransformerEntailmentEngine()` to `AuditLaneVerifier`.
 
-CALL-E does the one thing nothing else can: get a real, unscripted, in-the-moment human account. The entailment engine does the one thing it's suited for: a consistent, explainable verdict on whether that account matches the claim.
+`telephony-gate` doesn't need entailment scoring — it's a direct yes/no confirmation, not a claim-vs-statement comparison — but shares the same call/interview/fail-closed machinery.
+
+## Why Claude Code specifically
+
+Most comparable "agent skill" write-ups are platform-agnostic instruction patterns any capable agent could theoretically follow. `telephony-gate` is deliberately different: its entire value is that the gate is a *real interception point an agent cannot skip*, and that guarantee only exists because it's built against Claude Code's actual `PreToolUse` hook contract, not a documented convention. Something proven to work against one real, currently-widely-used agent's actual execution path — 129 tests, fired live during development, two real crash bugs found and fixed by adversarial testing — is a stronger claim than something theoretically universal but verified nowhere. The verification core underneath has zero Claude Code coupling, though — see `skills/auditlane/SKILL.md` for exactly what's portable and what a new adapter for another agent host would need.
 
 ## Quickstart — see it work in 10 seconds, no API key
 
@@ -67,17 +87,50 @@ pip install -r requirements.txt
 python demo/dress_rehearsal.py
 ```
 
-This runs three full scenarios (a denied claim, a resolved two-hop chain, an unreachable authorizer) entirely offline, using the fixture bank in `auditline/calle_client.py`. No `CALLE_API_KEY`, no network access, no real phone calls.
+This runs three full `audit_pr` scenarios (a denied claim, a resolved two-hop chain, an unreachable authorizer) entirely offline, using the fixture bank in `auditlane/calle_client.py`. No `CALLE_API_KEY`, no network access, no real phone calls.
 
 ### Web UI — Verification Ledger Dashboard
-
-Launch the local compliance ledger interface:
 
 ```bash
 python scripts/serve_ui.py --port 8080
 ```
 
-Then navigate to `http://localhost:8080` in your browser to inspect the audit ledger, multi-hop verification timelines, organization directory, and trigger interactive PR verifications.
+Navigate to `http://localhost:8080` for the audit ledger, multi-hop verification timelines, the organization directory, a telephony-sudo sandbox, and a Voice Sandbox for direct test calls. Every real result — from any of these panels — is persisted server-side to `.auditlane_ledger.json`, not just held in browser memory.
+
+### Enabling the automatic command gate
+
+Register the hook in `.claude/settings.json` (already done in this repo):
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Bash",
+      "hooks": [{
+        "type": "command",
+        "command": "python \"${CLAUDE_PROJECT_DIR}/hooks/pretooluse_telephony_gate.py\"",
+        "timeout": 300
+      }]
+    }]
+  }
+}
+```
+
+Then set who has to answer for a dangerous command:
+
+```bash
+export AUDITLANE_HOOK_AUTHORIZER="the security lead"   # a phonebook.json key
+```
+
+Leave it unset and the gate fails closed on every dangerous match — it never silently allows just because nobody configured an authorizer.
+
+**Preview any claim before spending a real call:**
+
+```bash
+python scripts/run_verification.py --dry-run --title "..." --body "..."
+```
+
+Prints the exact phone number, region, and prompt CALL-E would receive — zero API calls, zero cost.
 
 Run the test suite:
 
@@ -85,61 +138,67 @@ Run the test suite:
 python -m pytest tests/ -v
 ```
 
-Run it against your own PR text from the command line:
-
-```bash
-cp phonebook.example.json phonebook.json   # edit with your real org directory
-python scripts/run_verification.py --title "..." --body "..." --pr-ref "myrepo#123"
-```
-
-Exit codes are CI-gate-friendly: `0` = verified, `1` = blocked, `2` = needs human review.
-
 ### Going live
 
-Live calls are **off by default** (`AUDITLINE_DRESS_REHEARSAL=true`). To place real calls:
+Live calls are **off by default** (`AUDITLANE_DRESS_REHEARSAL=true`). To place real calls:
 
 ```bash
 pip install calle-ai
-export AUDITLINE_DRESS_REHEARSAL=false
+export AUDITLANE_DRESS_REHEARSAL=false
 export CALLE_API_KEY=your_real_key
 ```
 
-Read **[docs/SAFETY.md](docs/SAFETY.md)** first — this makes real phone calls to real colleagues.
+A local call-budget guard (`AUDITLANE_MAX_LIVE_CALLS`, default 3) caps live calls placed per session, tracked on disk independent of CALL-E's own balance — a retry loop or a misconfiguration can't silently run up real charges. Raise it explicitly, or delete `.auditlane_call_budget.json`, when you actually mean to place more.
 
-### Wiring it into a repo
+Read **[docs/SAFETY.md](docs/SAFETY.md)** first — this makes real phone calls to real people, and can block real commands from executing.
 
-See `.github/workflows/auditline.yml` — it runs on every PR, posts the verdict as a comment, and sets a commit status. Dress rehearsal stays on until a repository variable and a secret are both explicitly set.
+### Wiring `audit_pr` into a repo
+
+See `action.yml` and `.github/workflows/` — runs on every PR, posts the verdict as a comment, sets a commit status. Dress rehearsal stays on until a repository variable and a secret are both explicitly set.
 
 ## Project layout
 
 ```
-auditline/
+auditlane/
   claim_extractor.py    Rule-based extraction of verbal-authorization claims
+  danger_patterns.py     22-category regex detection for telephony-gate
   calle_client.py        CALL-E task/schema builders + real SDK client + mock backend
   entailment.py           Heuristic (default) and optional transformer NLI engines
   verifier.py             Multi-hop orchestration + fail-closed decision policy
+  attestation.py          HMAC-signed cryptographic voice attestations
+  mcp_server.py           MCP tool surface (telephony_verify_action, audit_pr_verbal_claims)
   github_integration.py   Post verdict as PR comment / commit status
   models.py, config.py    Data classes and environment-driven configuration
-scripts/run_verification.py   CLI entry point (used by the GitHub Action)
-demo/dress_rehearsal.py        Zero-setup, offline, three-scenario walkthrough
-tests/                          21 unit/integration tests, all offline
-docs/SAFETY.md                  Read before ever going live
-docs/RUBRIC_MAPPING.md          How this maps to the hackathon's judging criteria
-skills/auditline-skill/      Packaged as a reusable Agent Skill contribution
+hooks/pretooluse_telephony_gate.py   The Claude Code PreToolUse hook itself
+scripts/
+  run_verification.py     CLI entry point for audit_pr (used by the GitHub Action)
+  serve_ui.py              Web dashboard + REST API
+  telephony_sudo.py        CLI voice-gated command wrapper
+  git_voice_blame.py        Query voice attestations by commit SHA
+demo/dress_rehearsal.py     Zero-setup, offline, three-scenario walkthrough
+web/                         Verification Ledger Dashboard frontend
+tests/                       129 unit/integration/stress tests, all offline
+docs/SAFETY.md                Read before ever going live
+docs/RUBRIC_MAPPING.md         How this maps to the hackathon's judging criteria
+skills/auditlane/            Packaged as a reusable Agent Skill contribution
+.claude/settings.json          Hook registration
 ```
 
-## Extension points (not built, deliberately out of scope for the hackathon window)
+## Extension points (not built, deliberately out of scope)
 
 - **LLM-based claim extraction** for higher recall on messier phrasing than the current regex extractor handles (see the module docstring in `claim_extractor.py` for its known scope limits).
-- **Fanning out multiple claims per PR** — the current version audits the first claim found per run to keep demo output readable; the data model (`extract_claims` returns a list) already supports auditing all of them.
+- **Fanning out multiple claims per PR** — `audit_pr` currently audits the first claim found per run to keep output readable; the data model (`extract_claims` returns a list) already supports auditing all of them.
 - **A real org-directory integration** instead of a flat JSON phonebook file.
+- **True per-authorizer rate limiting** — the current call-budget guard is a global session cap, not yet "no more than N calls to the same specific person per day."
+- **Adapters for other agent hosts** — the verification core has zero Claude Code coupling; `telephony-gate`'s enforcement point specifically does not (that's what makes it real). Porting the interception layer to another agent host's equivalent hook mechanism is new adapter code, not a rewrite.
 
 ## Known limitations, stated plainly
 
-- The rule-based extractor is tuned for common phrasings ("confirmed with X", "X verbally cleared", "the database admin approved") and will miss more creative phrasing — false negatives, not false positives, are the expected failure mode, which is the safer direction to err in.
-- The heuristic entailment engine is a deliberately simple lexical-overlap approximation, not a claim of state-of-the-art NLI accuracy. It's designed to be conservative (defaults to "neutral" / defer-to-human when unsure) rather than confidently wrong.
-- The phonebook must be maintained separately from the PR content — AuditLine never dials a number that appeared in the text it's auditing, on purpose (see SAFETY.md).
+- The rule-based extractor is tuned for common phrasings and will miss more creative ones — false negatives, not false positives, are the expected failure mode for `audit_pr`, which is the safer direction to err in.
+- `danger_patterns.py` is deliberately biased the opposite way — toward over-matching. A false positive there costs one phone call; a false negative is the failure mode that actually matters for a safety gate.
+- The heuristic entailment engine is a deliberately simple lexical-overlap approximation, not a claim of state-of-the-art NLI accuracy. It defaults to "neutral" / defer-to-human when unsure rather than confidently wrong.
+- The phonebook must be maintained separately from anything untrusted — AuditLane never dials a number derived from the PR text being audited or the command being gated (see `docs/SAFETY.md`).
 
 ## Why this, and not something else
 
-Everything else in this space that we could find — approval-gate tools, diff-review bots, turn-end checks that compare an agent's claims to its own tool-call logs — verifies against a *digital* artifact. None of them phone the person. AuditLine is built specifically for the claim category that was never going to have a digital trail in the first place.
+Everything else in this space that we could find — approval-gate tools, diff-review bots, turn-end checks that compare an agent's claims to its own tool-call logs — verifies against a *digital* artifact, or trusts the agent to voluntarily ask first. None of them phone the person, and none of them sit in the agent's own execution path where asking isn't optional. AuditLane does both: it's built for the one claim category that was never going to have a digital trail, and for the one enforcement point an agent can't talk its way around.

@@ -24,9 +24,9 @@ _STATUS_STATE = {
 }
 
 _STATUS_DESCRIPTION = {
-    Verdict.VERIFIED: "AuditLine: claim verified by phone",
-    Verdict.BLOCKED: "AuditLine: claim contradicted, merge blocked",
-    Verdict.NEEDS_HUMAN_REVIEW: "AuditLine: could not verify, human review required",
+    Verdict.VERIFIED: "AuditLane: claim verified by phone",
+    Verdict.BLOCKED: "AuditLane: claim contradicted, merge blocked",
+    Verdict.NEEDS_HUMAN_REVIEW: "AuditLane: could not verify, human review required",
 }
 
 
@@ -55,7 +55,7 @@ def set_commit_status(config: Config, commit_sha: str, outcome: VerificationOutc
     body = {
         "state": _STATUS_STATE[outcome.verdict],
         "description": _STATUS_DESCRIPTION[outcome.verdict],
-        "context": "auditline/verbal-authorization-check",
+        "context": "auditlane/verbal-authorization-check",
     }
     response = requests.post(url, headers=headers, json=body, timeout=15)
     response.raise_for_status()

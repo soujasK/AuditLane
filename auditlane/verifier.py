@@ -1,5 +1,5 @@
 """
-ChronoAuditor ties the pipeline together:
+AuditLaneVerifier ties the pipeline together:
 
     PR text --extract--> Claim --call--> CallResult --entail--> HopResult
                                                                      |
@@ -23,6 +23,8 @@ match.
 
 from __future__ import annotations
 
+import re
+import sys
 from typing import Dict, Optional
 
 from .calle_client import CalleVerificationClient
@@ -31,8 +33,23 @@ from .config import Config
 from .entailment import EntailmentEngine, default_engine
 from .models import Claim, HopResult, Verdict, VerificationOutcome
 
+_UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9_-]")
 
-class ChronoAuditor:
+
+def _safe_commit_sha(pr_reference: str) -> str:
+    """A real PR reference is normally "owner/repo#123" — the "/" in a
+    repo name, used unsanitized as an attestation filename, gets treated
+    as a literal path separator (attestations/owner/repo_123.json), and
+    the write fails because the "owner" subdirectory doesn't exist. That
+    failure was being silently swallowed, so every VERIFIED result using
+    a realistic PR reference (which is all of them) never actually got
+    a saved attestation despite reporting an attestation_id. Replacing
+    every non-alphanumeric character keeps this filesystem-safe for any
+    input, not just the "/" and "#" cases that happened to be tested."""
+    return _UNSAFE_FILENAME_CHARS.sub("_", pr_reference)
+
+
+class AuditLaneVerifier:
     def __init__(
         self,
         config: Optional[Config] = None,
@@ -56,7 +73,7 @@ class ChronoAuditor:
                 verdict=Verdict.VERIFIED,
                 reason=(
                     "No claims of undocumented verbal authorization were "
-                    "found in this PR — nothing for AuditLine to check."
+                    "found in this PR — nothing for AuditLane to check."
                 ),
             )
         # A PR could contain several distinct claims; a production version
@@ -118,22 +135,16 @@ class ChronoAuditor:
             )
 
             if is_contradiction:
-                amendment = None
-                suggested_patch = None
-                stmt = call_result.authorizer_statement.lower()
-                if "keep" in stmt or "instead" in stmt or "actually agreed" in stmt:
-                    amendment = f"Authorizer suggested verbal amendment: \"{call_result.authorizer_statement}\""
-                    suggested_patch = (
-                        f"# Voice-to-Diff Healing Patch\n"
-                        f"# Generated from verbal amendment by {current_claim.authorizer_name}\n"
-                        f"# Retain schema compatibility while addressing requested change:\n"
-                        f"--- a/schema.sql\n"
-                        f"+++ b/schema.sql\n"
-                        f"@@ -1,4 +1,4 @@\n"
-                        f"- DROP TABLE v1_accounts;\n"
-                        f"+ -- RETENTION POLICY: v1_accounts preserved per {current_claim.authorizer_name} verbal guidance.\n"
-                    )
-
+                # NOTE: this used to also generate a "verbal_amendment" /
+                # "suggested_patch" ("Voice-to-Diff Healing") whenever the
+                # statement contained "keep"/"instead"/"actually agreed" —
+                # but the patch text was a hardcoded "DROP TABLE
+                # v1_accounts" diff, unconditionally, regardless of what
+                # the actual claim was about. There's no real parsing of
+                # the statement into an actual patch, so it was removed
+                # rather than shipped as a feature that lies about its
+                # own output for every claim that isn't literally about
+                # v1_accounts.
                 return VerificationOutcome(
                     pr_reference=pr_reference,
                     hops=hops,
@@ -142,8 +153,6 @@ class ChronoAuditor:
                         f"{current_claim.authorizer_name} contradicted the claim "
                         f"(\"{call_result.authorizer_statement}\"). Blocking merge."
                     ),
-                    verbal_amendment=amendment,
-                    suggested_patch=suggested_patch,
                 )
 
             if not is_confident_entailment:
@@ -183,18 +192,28 @@ class ChronoAuditor:
             try:
                 from .attestation import create_voice_attestation, save_attestation
                 attest = create_voice_attestation(
-                    commit_sha=pr_reference.replace("#", "_"),
+                    commit_sha=_safe_commit_sha(pr_reference),
                     pr_reference=pr_reference,
                     authorizer_name=current_claim.authorizer_name,
                     phone_number=phone,
                     statement=call_result.authorizer_statement,
+                    call_uuid=call_result.call_uuid or None,
+                    audio_sha256=call_result.audio_sha256 or None,
                     entailment_score=entailment_result.confidence,
                     entailment_engine=entailment_result.engine,
                     verdict="VERIFIED",
                 )
                 save_attestation(attest)
                 attestation_id = attest.attestation_id
-            except Exception:
+            except Exception as e:
+                # Previously a bare `except Exception: attestation_id =
+                # None` — swallowed the real error completely, which is
+                # exactly how the "/" path-separator bug above went
+                # unnoticed all session despite attestations silently
+                # failing on every realistic PR reference. A VERIFIED
+                # verdict must never be blocked by an attestation
+                # failure, but the failure itself must not be invisible.
+                print(f"Warning: could not create/save voice attestation: {e}", file=sys.stderr)
                 attestation_id = None
 
             return VerificationOutcome(

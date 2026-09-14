@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AuditLine Model Context Protocol (MCP) Server.
+AuditLane Model Context Protocol (MCP) Server.
 
 Enables Claude Code, Cursor, Codex, and other MCP-compliant autonomous agent
 environments to natively perform out-of-band telephony verifications, inspect
@@ -22,11 +22,11 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from auditline.attestation import create_voice_attestation, load_attestation, save_attestation
-from auditline.calle_client import CalleVerificationClient
-from auditline.config import Config
-from auditline.models import Claim, Confirmation
-from auditline.verifier import ChronoAuditor
+from auditlane.attestation import create_voice_attestation, load_attestation, save_attestation
+from auditlane.calle_client import CalleVerificationClient
+from auditlane.config import Config
+from auditlane.models import Claim, Confirmation
+from auditlane.verifier import AuditLaneVerifier
 
 
 def load_phonebook() -> Dict[str, str]:
@@ -87,7 +87,7 @@ def handle_tools_list() -> List[Dict[str, Any]]:
         },
         {
             "name": "list_directory_authorizers",
-            "description": "Lists verified organization contacts recognized by AuditLine.",
+            "description": "Lists verified organization contacts recognized by AuditLane.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -103,7 +103,7 @@ def handle_tool_call(name: str, arguments: Dict[str, Any]) -> str:
         title = arguments.get("title", "")
         body = arguments.get("body", "")
         pr_ref = arguments.get("pr_ref", "mcp-agent-pr#01")
-        auditor = ChronoAuditor(phonebook=phonebook)
+        auditor = AuditLaneVerifier(phonebook=phonebook)
         outcome = auditor.audit_pr(pr_ref, title, body)
         return outcome.to_markdown()
 
@@ -129,6 +129,8 @@ def handle_tool_call(name: str, arguments: Dict[str, Any]) -> str:
                 authorizer_name=authorizer,
                 phone_number=phone,
                 statement=res.authorizer_statement,
+                call_uuid=res.call_uuid or None,
+                audio_sha256=res.audio_sha256 or None,
                 verdict="VERIFIED",
             )
             save_attestation(attest, base_dir=ROOT_DIR)
@@ -178,7 +180,7 @@ def run_mcp_server():
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "serverInfo": {
-                        "name": "auditline-mcp",
+                        "name": "auditlane-mcp",
                         "version": "1.0.0",
                     },
                     "capabilities": {
@@ -197,19 +199,35 @@ def run_mcp_server():
         elif method == "tools/call":
             tool_name = params.get("name")
             tool_args = params.get("arguments", {})
-            output_text = handle_tool_call(tool_name, tool_args)
-            resp = {
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": output_text,
-                        }
-                    ]
-                },
-            }
+            try:
+                output_text = handle_tool_call(tool_name, tool_args)
+                resp = {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "result": {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": output_text,
+                            }
+                        ]
+                    },
+                }
+            except Exception as e:
+                # A live call can fail for reasons entirely outside our
+                # control (CALL-E balance, the local call-budget
+                # guardrail, network issues) — those must come back as a
+                # normal JSON-RPC error the calling agent can read and
+                # act on, not kill this server's stdin loop for every
+                # other tool call on the connection.
+                resp = {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "error": {
+                        "code": -32000,
+                        "message": str(e),
+                    },
+                }
         else:
             resp = {
                 "jsonrpc": "2.0",

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   AuditLine — Verification Ledger Frontend Controller
+   AuditLane — Verification Ledger Frontend Controller
    ========================================================================== */
 
 (function () {
@@ -212,6 +212,58 @@
     }
   ];
 
+  // Ledger persistence. Real source of truth is now the server's
+  // .auditlane_ledger.json (see scripts/serve_ui.py and auditlane/ledger.py
+  // — every real call result, from telephony-gate (the Claude Code hook),
+  // Voice Sandbox, or telephony-sudo, gets appended there, durably,
+  // independent of any browser). This array/localStorage pair is kept as
+  // a fast-render cache and offline fallback only, not the authoritative
+  // store anymore. audit_pr no longer writes here at all — it runs via
+  // the GitHub Actions workflow and posts straight to the PR itself.
+  const LEDGER_STORAGE_KEY = 'auditlane_ledger_v1';
+
+  function persistAudits() {
+    try {
+      localStorage.setItem(LEDGER_STORAGE_KEY, JSON.stringify(audits));
+    } catch (e) {
+      console.warn('Could not cache ledger to localStorage:', e);
+    }
+  }
+
+  (function loadCachedAudits() {
+    try {
+      const saved = localStorage.getItem(LEDGER_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          audits = parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load cached ledger, using seed data:', e);
+    }
+  })();
+
+  // Load the REAL, durable ledger from the server. This overwrites
+  // whatever cache/seed data rendered first — real results take priority
+  // over any local guess the moment they're available.
+  function loadRealLedger() {
+    fetch('/api/ledger')
+      .then(res => res.json())
+      .then(serverAudits => {
+        // A successful response — even an empty array, e.g. right after
+        // a fresh install or a reset — is real, authoritative state and
+        // must win over stale seed/cached data. Only an actual fetch
+        // failure (below) should leave the seed/cache fallback in place.
+        if (Array.isArray(serverAudits)) {
+          audits = serverAudits;
+          persistAudits();
+          renderLedger();
+        }
+      })
+      .catch(err => console.warn('Could not load real ledger from server:', err));
+  }
+
   let currentFilter = 'all';
   let searchQuery = '';
   let activeAuditId = null;
@@ -223,7 +275,6 @@
   const viewTelephonySudo = document.getElementById('view-telephony-sudo');
   const viewLiveSandbox = document.getElementById('view-live-sandbox');
   const viewPhonebook = document.getElementById('view-phonebook');
-  const viewSettings = document.getElementById('view-settings');
   const viewDocs = document.getElementById('view-docs');
   const auditTableBody = document.getElementById('audit-table-body');
   const directoryTableBody = document.getElementById('directory-table-body');
@@ -243,7 +294,6 @@
       viewPhonebook.classList.add('active');
       renderDirectory();
     }
-    else if (viewName === 'settings') viewSettings.classList.add('active');
     else if (viewName === 'docs') viewDocs.classList.add('active');
   }
 
@@ -411,33 +461,22 @@
     document.getElementById('detail-meta-engine').textContent = item.engine;
     document.getElementById('detail-pr-body').textContent = item.body;
 
-    // Render Voice-to-Diff Healing
+    // Voice-to-Diff Healing card removed — it always rendered a
+    // hardcoded "DROP TABLE v1_accounts" patch for ANY BLOCKED verdict,
+    // regardless of what the actual claim was about. No real diff/patch
+    // generation exists in the backend to back this; showing it was
+    // actively misleading rather than a demo nicety.
     const healingContainer = document.getElementById('detail-healing-container');
-    if (item.verbal_amendment || item.verdict === 'BLOCKED') {
-      healingContainer.style.display = 'block';
-      healingContainer.innerHTML = `
-        <div class="healing-card">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <strong style="color: #e2b350; font-size: 13px;">VOICE-TO-DIFF HEALING</strong>
-            <span class="badge badge-review">VERBAL AMENDMENT CAPTURED</span>
-          </div>
-          <p style="font-size: 12px; color: var(--text-primary);">${escapeHtml(item.verbal_amendment || 'Authorizer suggested keeping legacy accounts until Q3 migration finishes.')}</p>
-          <div class="diff-viewer">
-            <div class="diff-del-line">- DROP TABLE v1_accounts;</div>
-            <div class="diff-add-line">+ -- RETENTION POLICY: v1_accounts preserved per authorizer verbal guidance.</div>
-          </div>
-          <button class="btn btn-secondary btn-sm" style="margin-top: 10px;" onclick="alert('Patch instructions dispatched to agent branch.')">
-            Apply Suggested Diff Patch to Branch
-          </button>
-        </div>
-      `;
-    } else {
-      healingContainer.style.display = 'none';
-    }
+    if (healingContainer) healingContainer.style.display = 'none';
 
-    // Render Cryptographic Attestation
+    // Render Cryptographic Attestation — only when one was genuinely
+    // created (see auditlane/attestation.py); previously showed for
+    // EVERY 'VERIFIED' verdict with a hardcoded fake hash identical
+    // across every result, and claimed storage in "refs/notes/auditlane"
+    // which isn't where it's actually saved.
     const attestContainer = document.getElementById('detail-attestation-container');
-    if (item.verdict === 'VERIFIED' || item.attestation_id) {
+    const attestedHop = (item.hops || []).find(h => h.audioSha256) || {};
+    if (item.attestation_id) {
       attestContainer.style.display = 'block';
       attestContainer.innerHTML = `
         <div class="attestation-card">
@@ -446,9 +485,10 @@
             <span class="badge badge-verified">SIG:HMAC-SHA256:VERIFIED</span>
           </div>
           <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); line-height: 1.6;">
-            <div>Attestation ID : <strong style="color: var(--text-primary);">${item.attestation_id || 'attest_' + item.commitSha}</strong></div>
-            <div>Audio Stream   : <span style="color: var(--accent-gold);">sha256:4a5de800fd2ff808cacda22ddb0fce48514953c...</span></div>
-            <div>Git Storage    : <span style="color: var(--text-primary);">refs/notes/auditline (Immutable)</span></div>
+            <div>Attestation ID : <strong style="color: var(--text-primary);">${escapeHtml(item.attestation_id)}</strong></div>
+            <div>Call UUID      : <span style="color: var(--accent-gold);">${escapeHtml(attestedHop.callUuid || 'n/a (dress rehearsal)')}</span></div>
+            <div>Transcript Hash: <span style="color: var(--accent-gold);">${attestedHop.audioSha256 ? 'sha256:' + escapeHtml(attestedHop.audioSha256.substring(0, 40)) + '...' : 'n/a (dress rehearsal)'}</span></div>
+            <div>Storage        : <span style="color: var(--text-primary);">.git/auditlane/attestations/ (local, HMAC-signed JSON)</span></div>
           </div>
         </div>
       `;
@@ -511,11 +551,13 @@
               <div class="section-label">CALL-E Telephony Transcript (Free Recall First)</div>
               <div class="transcript-block">${escapeHtml(hop.statement)}</div>
               
-              <!-- Audio Player Bar -->
+              <!-- Waveform is decorative only — CALL-E's API exposes call
+                   transcripts, not recorded audio, so there's nothing
+                   real to play back. A "play" button here previously
+                   just showed a fake alert claiming to play audio. -->
               <div class="audio-player-card">
-                <button class="play-btn" onclick="alert('Playing recorded telephony audio stream...')">&#9654;</button>
                 <div class="waveform-container">${waveBars}</div>
-                <span class="mono-cell" style="font-size: 11px; color: var(--text-muted);">0:${hop.durationSec < 10 ? '0' : ''}${hop.durationSec} &bull; 8kHz Opus</span>
+                <span class="mono-cell" style="font-size: 11px; color: var(--text-muted);">${hop.durationSec}s call duration &bull; transcript above is the full real record</span>
               </div>
             </div>
 
@@ -547,8 +589,33 @@
     switchView('dashboard');
   });
 
-  // Render Directory
+  // Render Directory — fetches the REAL phonebook.json via the backend
+  // every time this view is opened, instead of the hardcoded stub data
+  // `phonebook` was seeded with above (which never reflected reality).
   function renderDirectory() {
+    fetch('/api/phonebook')
+      .then(res => res.json())
+      .then(data => {
+        phonebook = Object.entries(data).map(([name, phone], i) => ({
+          id: 'usr_' + i,
+          name: name,
+          role: 'Verified Contact',
+          department: '—',
+          phone: phone,
+          masked: true,
+          lastVerified: '—',
+          status: 'Active'
+        }));
+        renderDirectoryTable();
+      })
+      .catch(err => {
+        console.warn('Could not load phonebook:', err);
+        phonebook = [];
+        directoryTableBody.innerHTML = '<tr><td colspan="7" style="color: #e07466; padding: 16px;">Could not load the directory from the backend. Try reloading the page.</td></tr>';
+      });
+  }
+
+  function renderDirectoryTable() {
     directoryTableBody.innerHTML = '';
     phonebook.forEach(contact => {
       const tr = document.createElement('tr');
@@ -569,7 +636,7 @@
         <td><span class="mono-cell" style="color: var(--text-muted); font-size: 11px;">${contact.lastVerified}</span></td>
         <td><span class="badge badge-verified">${contact.status}</span></td>
         <td style="text-align: right;">
-          <button class="btn btn-secondary btn-sm" onclick="alert('Test diagnostic call simulated.')">Test Line</button>
+          <button class="btn btn-secondary btn-sm test-line-btn" data-contact-id="${contact.id}">Test Line</button>
         </td>
       `;
 
@@ -584,8 +651,22 @@
         const contact = phonebook.find(c => c.id === cid);
         if (contact) {
           contact.masked = !contact.masked;
-          renderDirectory();
+          renderDirectoryTable();
         }
+      });
+    });
+
+    // Attach "Test Line" buttons — data-attribute + real listener, not
+    // inline onclick with string-interpolated name/phone. A name
+    // containing a single quote (e.g. "O'Brien") would have broken the
+    // inline-onclick JS even with HTML-entity-escaping, since the
+    // browser HTML-decodes the attribute BEFORE executing it as JS.
+    document.querySelectorAll('.test-line-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const cid = btn.getAttribute('data-contact-id');
+        const contact = phonebook.find(c => c.id === cid);
+        if (contact) window.testContactLine(contact.name, contact.phone);
       });
     });
   }
@@ -599,213 +680,16 @@
     return p.substring(0, 3) + ' ••• ••• ' + p.slice(-4);
   }
 
-  // Modal Handling
-  const modal = document.getElementById('audit-modal');
-  const btnOpenModal = document.getElementById('btn-open-audit-modal');
-  const btnCloseModal = document.getElementById('btn-close-modal');
-  const btnCancelModal = document.getElementById('btn-cancel-modal');
-  const btnExecuteAudit = document.getElementById('btn-execute-audit');
-  const presetSelect = document.getElementById('modal-preset');
-  const inputRepoPr = document.getElementById('modal-repo-pr');
-  const inputPrTitle = document.getElementById('modal-pr-title');
-  const inputPrBody = document.getElementById('modal-pr-body');
-  const liveStatus = document.getElementById('modal-live-status');
-  const statusText = document.getElementById('modal-status-text');
-
-  btnOpenModal.addEventListener('click', () => {
-    modal.classList.add('active');
-    liveStatus.style.display = 'none';
-  });
-
-  function closeModal() {
-    modal.classList.remove('active');
-  }
-
-  btnCloseModal.addEventListener('click', closeModal);
-  btnCancelModal.addEventListener('click', closeModal);
-
-  presetSelect.addEventListener('change', () => {
-    const val = presetSelect.value;
-    if (val === 'sarah-denial') {
-      inputRepoPr.value = 'acme-corp/core-infra#512';
-      inputPrTitle.value = 'Drop legacy v1_accounts table';
-      inputPrBody.value = 'As confirmed with @sarah_dba during standup, this is safe to drop the legacy table.';
-    } else if (val === 'architect-multihop') {
-      inputRepoPr.value = 'acme-corp/auth-service#340';
-      inputPrTitle.value = 'Change access pattern for token routing';
-      inputPrBody.value = 'The architect verbally cleared this breaking schema change during today\'s standup, so merging this once CI is green.';
-    } else if (val === 'unknown-person') {
-      inputRepoPr.value = 'acme-corp/keymaster#129';
-      inputPrTitle.value = 'Rotate the signing key';
-      inputPrBody.value = 'Confirmed with Random Person that rotating the signing key today is fine.';
-    }
-  });
-
-  // Execute Verification
-  btnExecuteAudit.addEventListener('click', () => {
-    const title = inputPrTitle.value.trim();
-    const body = inputPrBody.value.trim();
-    const prRef = inputRepoPr.value.trim() || 'myrepo#100';
-
-    if (!title || !body) {
-      alert('Please provide both PR Title and PR Description.');
-      return;
-    }
-
-    liveStatus.style.display = 'block';
-    btnExecuteAudit.disabled = true;
-
-    // Simulate Step 1: Claim extraction
-    statusText.textContent = 'Parsing PR text with rule-based regex claim extractor...';
-
-    setTimeout(() => {
-      statusText.textContent = 'Claim extracted. Querying internal directory for authorizer phone number...';
-
-      setTimeout(() => {
-        statusText.textContent = 'Dialing authorizer via CALL-E telephony (dress rehearsal fixture)...';
-
-        setTimeout(() => {
-          statusText.textContent = 'Analyzing response statement with Entailment Engine...';
-
-          fetch('/api/audit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: title, body: body, pr_ref: prRef })
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (data && !data.error) {
-              audits.unshift(data);
-              btnExecuteAudit.disabled = false;
-              closeModal();
-              renderLedger();
-              openAuditDetail(data.id);
-            } else {
-              throw new Error(data.error || 'Unknown backend error');
-            }
-          })
-          .catch(err => {
-            console.warn('Backend /api/audit unavailable, falling back to local simulation engine:', err);
-            // Fallback deterministic simulation
-            let newAudit;
-            const bodyLower = body.toLowerCase();
-
-            if (bodyLower.includes('sarah')) {
-              newAudit = {
-                id: 'aud_' + Math.floor(1000 + Math.random() * 9000),
-                prRef: prRef,
-                title: title,
-                body: body,
-                commitSha: Math.random().toString(16).substring(2, 12),
-                authorizer: '@sarah_dba',
-                timestamp: 'Just now',
-                verdict: 'BLOCKED',
-                reason: '@sarah_dba contradicted the claim ("No — we actually agreed to keep it"). Blocking merge.',
-                policy: 'Denial or Entailment Contradiction -> BLOCKED',
-                engine: 'Heuristic-v1',
-                hops: [
-                  {
-                    hopIndex: 0,
-                    authorizer: '@sarah_dba',
-                    role: 'Staff Database Administrator',
-                    phone: '+1 415 555 0192',
-                    reached: true,
-                    durationSec: 40,
-                    claimText: body,
-                    statement: 'No — we actually agreed to keep v1_accounts for backward compatibility until the Q3 migration finishes.',
-                    confirmation: 'denied',
-                    entailmentResult: 'neutral',
-                    confidence: '0.50',
-                    engine: 'heuristic-v1'
-                  }
-                ]
-              };
-            } else if (bodyLower.includes('architect')) {
-              newAudit = {
-                id: 'aud_' + Math.floor(1000 + Math.random() * 9000),
-                prRef: prRef,
-                title: title,
-                body: body,
-                commitSha: Math.random().toString(16).substring(2, 12),
-                authorizer: 'The architect',
-                timestamp: 'Just now',
-                verdict: 'VERIFIED',
-                reason: 'Every hop in the claimed chain was independently confirmed. Safe to merge.',
-                policy: 'All Hops Confirmed with Entailment -> VERIFIED',
-                engine: 'Heuristic-v1',
-                hops: [
-                  {
-                    hopIndex: 0,
-                    authorizer: 'The architect',
-                    role: 'Principal Systems Architect',
-                    phone: '+1 206 555 0148',
-                    reached: true,
-                    durationSec: 50,
-                    claimText: body,
-                    statement: 'Yes, I verbally cleared this breaking schema change this morning — the security lead had already signed off on the access-pattern change last week, so I gave the go-ahead.',
-                    confirmation: 'confirmed',
-                    entailmentResult: 'entailment',
-                    confidence: '0.73',
-                    engine: 'heuristic-v1'
-                  },
-                  {
-                    hopIndex: 1,
-                    authorizer: 'the security lead',
-                    role: 'Head of Product Security',
-                    phone: '+1 650 555 0173',
-                    reached: true,
-                    durationSec: 35,
-                    claimText: 'the security lead already signed off on the access-pattern change',
-                    statement: 'Yes, that\'s right — I already signed off on the access-pattern change last week after reviewing it, so it\'s confirmed on my end.',
-                    confirmation: 'confirmed',
-                    entailmentResult: 'entailment',
-                    confidence: '0.85',
-                    engine: 'heuristic-v1'
-                  }
-                ]
-              };
-            } else {
-              newAudit = {
-                id: 'aud_' + Math.floor(1000 + Math.random() * 9000),
-                prRef: prRef,
-                title: title,
-                body: body,
-                commitSha: Math.random().toString(16).substring(2, 12),
-                authorizer: 'Random Person',
-                timestamp: 'Just now',
-                verdict: 'NEEDS_HUMAN_REVIEW',
-                reason: 'Authorizer phone not registered in phonebook directory. Failing closed to human review.',
-                policy: 'Missing Phone / Unreachable -> NEEDS_HUMAN_REVIEW',
-                engine: 'Heuristic-v1',
-                hops: [
-                  {
-                    hopIndex: 0,
-                    authorizer: 'Random Person',
-                    role: 'Unregistered Entity',
-                    phone: 'None',
-                    reached: false,
-                    durationSec: 0,
-                    claimText: body,
-                    statement: '[CALL ABORTED: No directory record for named authorizer]',
-                    confirmation: 'unreachable',
-                    entailmentResult: 'neutral',
-                    confidence: '0.00',
-                    engine: 'heuristic-v1'
-                  }
-                ]
-              };
-            }
-
-            audits.unshift(newAudit);
-            btnExecuteAudit.disabled = false;
-            closeModal();
-            renderLedger();
-            openAuditDetail(newAudit.id);
-          });
-        }, 500);
-      }, 400);
-    }, 400);
-  });
+  // Note: the "Run Pull Request Verification" modal (POST /api/audit) was
+  // removed from the dashboard UI — it competed visually with
+  // telephony-gate as if they were equal-weight capabilities, when
+  // telephony-gate is the one with real, unconditional teeth. audit_pr
+  // itself is untouched: the backend endpoint, entailment engine, claim
+  // extractor, and GitHub Action integration all still work exactly as
+  // before for anyone driving them directly (see scripts/run_verification.py,
+  // the MCP server, or action.yml) — any past audit_pr result already in
+  // the ledger still renders in full via openAuditDetail() below, this
+  // just removed the one-off browser form for creating new ones.
 
   function escapeHtml(text) {
     if (!text) return '';
@@ -861,7 +745,7 @@
 
       function logTerminal(message, type) {
         let color = 'var(--text-muted)';
-        let prefix = '[AuditLine]';
+        let prefix = '[AuditLane]';
         if (type === 'freeze') {
           color = '#EF4444';
           prefix = '[SIGSTOP]';
@@ -908,6 +792,7 @@
           logTerminal('SECURITY ABORT: Terminating process (Exit code 1).', 'kill');
         }
         sudoTermOutput.scrollTop = sudoTermOutput.scrollHeight;
+        loadRealLedger();
       })
       .catch(err => {
         btnRunSudo.disabled = false;
@@ -929,6 +814,114 @@
   const sandboxClaim = document.getElementById('sandbox-claim');
   const sandboxStreamLog = document.getElementById('sandbox-stream-log');
 
+  // "Test Line" button on the Phonebook view used to just show a fake
+  // alert claiming a call was simulated — nothing actually happened.
+  // This makes it real: jump to Voice Sandbox with that contact's actual
+  // name/phone pre-filled, so the button genuinely does what it says.
+  window.testContactLine = function (name, phone) {
+    sandboxName.value = name;
+    sandboxPhone.value = phone;
+    switchView('live-sandbox');
+  };
+
+  function appendSandboxLog(html) {
+    sandboxStreamLog.innerHTML += html;
+  }
+
+  // Renders one real CALL-E event line ("Bot is speaking: ...",
+  // "Callee said: ...", "Call is ringing.", etc.) as it actually
+  // happens — this is the real interrogation stream, not a canned
+  // status sequence.
+  function renderLiveCallEvent(evt) {
+    const msg = evt.message || '';
+    let color = 'var(--text-muted)';
+    if (msg.startsWith('Bot is speaking:')) color = '#6366F1';
+    else if (msg.startsWith('Callee said:')) color = '#79c99e';
+    else if (/ringing|connected/i.test(msg)) color = 'var(--accent-gold)';
+    appendSandboxLog(`<div style="color: ${color}; position: relative; z-index: 2;">&gt; ${escapeHtml(msg)}</div>`);
+  }
+
+  function renderSandboxFinalResult(data) {
+    const statusColor = data.confirmation === 'confirmed' ? '#79c99e' : '#e07466';
+    appendSandboxLog(`
+      <div style="color: #79c99e; margin-top: 6px;">[CALL-E CARRIER] Call finished. Duration: ${data.durationSec}s</div>
+      <div style="color: var(--text-primary); margin-top: 4px;"><strong>Authorizer Statement:</strong> "${escapeHtml(data.statement)}"</div>
+      <div style="color: ${statusColor}; font-weight: 600; margin-top: 4px;">Direct Confirmation: ${data.confirmation.toUpperCase()}</div>
+      <div style="color: var(--accent-gold); margin-top: 4px;">Transcript Hash: ${data.audio_sha256 ? 'sha256:' + data.audio_sha256.substring(0, 32) + '...' : 'n/a (dress rehearsal — no real call placed)'}</div>
+      <div style="color: var(--text-muted); margin-top: 4px;">Call UUID: ${data.call_uuid || 'n/a (dress rehearsal — no real call placed)'}</div>
+    `);
+  }
+
+  function runMockSandboxCall(name, phone, claim) {
+    fetch('/api/test-call', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, phone: phone, claim: claim })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) throw new Error(data.error);
+      btnTriggerLiveCall.disabled = false;
+      renderSandboxFinalResult(data);
+      // The server already appended the real, authoritative ledger
+      // entry for this call before responding — just re-fetch it
+      // instead of separately constructing a client-side copy that
+      // could diverge from what's actually stored.
+      loadRealLedger();
+    })
+    .catch(err => {
+      btnTriggerLiveCall.disabled = false;
+      appendSandboxLog(`<div style="color: #e07466; margin-top: 6px;">[CALL-E ERROR] ${escapeHtml(err.message)}</div>`);
+    });
+  }
+
+  // Polls the real call's event log and status every 2s, rendering each
+  // new transcript line as it happens, until CALL-E reports a terminal
+  // status. 8-minute safety cap so a stuck/very long call can't poll
+  // forever if something goes wrong on CALL-E's side.
+  function pollLiveCall(callId, cursor, startedAt) {
+    const POLL_MS = 2000;
+    const MAX_MS = 8 * 60 * 1000;
+
+    if (Date.now() - startedAt > MAX_MS) {
+      btnTriggerLiveCall.disabled = false;
+      appendSandboxLog(`<div style="color: #e07466; margin-top: 6px;">[CALL-E] Still not finished after 8 minutes — stopped polling here. Check the Audits ledger shortly; the call may still complete on CALL-E's side.</div>`);
+      return;
+    }
+
+    const eventsUrl = '/api/live-call/events?call_id=' + encodeURIComponent(callId)
+      + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+
+    fetch(eventsUrl)
+      .then(res => res.json())
+      .then(eventsData => {
+        (eventsData.data || []).forEach(renderLiveCallEvent);
+        const nextCursor = eventsData.next_cursor || cursor;
+
+        fetch('/api/live-call/status?call_id=' + encodeURIComponent(callId))
+          .then(res => res.json())
+          .then(statusData => {
+            if (statusData.error) throw new Error(statusData.error);
+            if (statusData.terminal) {
+              btnTriggerLiveCall.disabled = false;
+              renderSandboxFinalResult(statusData.result);
+              loadRealLedger();
+            } else {
+              setTimeout(() => pollLiveCall(callId, nextCursor, startedAt), POLL_MS);
+            }
+          })
+          .catch(err => {
+            btnTriggerLiveCall.disabled = false;
+            appendSandboxLog(`<div style="color: #e07466; margin-top: 6px;">[CALL-E ERROR] ${escapeHtml(err.message)}</div>`);
+          });
+      })
+      .catch(() => {
+        // A transient events-poll failure shouldn't kill the whole
+        // stream — just retry on the next tick.
+        setTimeout(() => pollLiveCall(callId, cursor, startedAt), POLL_MS);
+      });
+  }
+
   if (btnTriggerLiveCall) {
     btnTriggerLiveCall.addEventListener('click', () => {
       const name = sandboxName.value.trim() || 'Judge';
@@ -941,42 +934,36 @@
           <canvas id="waveformCanvas" width="380" height="64"></canvas>
         </div>
         <div style="color: #6366F1; position: relative; z-index: 2;">[CALL-E DISPATCHER] Initiating call to ${escapeHtml(name)} (${escapeHtml(phone || 'Simulated Line')})...</div>
-        <div style="color: var(--text-muted); position: relative; z-index: 2;">&gt; Establishing carrier SIP handshake...</div>
-        <div style="color: var(--text-muted); position: relative; z-index: 2;">&gt; Task Prompt: Free recall before recognition active...</div>
       `;
       window.startLiveWaveform();
 
-      fetch('/api/test-call', {
+      fetch('/api/live-call/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name, phone: phone, claim: claim })
       })
       .then(res => res.json())
       .then(data => {
-        if (data.error) {
-           throw new Error(data.error);
+        if (data.error) throw new Error(data.error);
+        if (data.mock) {
+          appendSandboxLog(`<div style="color: var(--text-muted); position: relative; z-index: 2;">&gt; Dress rehearsal / demo number — resolving instantly, no live call placed.</div>`);
+          runMockSandboxCall(name, phone, claim);
+          return;
         }
-        btnTriggerLiveCall.disabled = false;
-        const statusColor = data.confirmation === 'confirmed' ? '#79c99e' : '#e07466';
-        sandboxStreamLog.innerHTML += `
-          <div style="color: #79c99e; margin-top: 6px;">[CALL-E CARRIER] Call connected. Duration: ${data.durationSec}s</div>
-          <div style="color: var(--text-primary); margin-top: 4px;"><strong>Authorizer Statement:</strong> "${escapeHtml(data.statement)}"</div>
-          <div style="color: ${statusColor}; font-weight: 600; margin-top: 4px;">Direct Confirmation: ${data.confirmation.toUpperCase()}</div>
-          <div style="color: var(--accent-gold); margin-top: 4px;">Audio Stream Hash: sha256:${data.audio_sha256 ? data.audio_sha256.substring(0, 32) : '4a5de...'}...</div>
-          <div style="color: var(--text-muted); margin-top: 4px;">Call UUID: ${data.call_uuid}</div>
-        `;
+        appendSandboxLog(`<div style="color: var(--text-muted); position: relative; z-index: 2;">&gt; Real call created (${escapeHtml(data.call_id)}) — streaming the actual conversation below as it happens...</div>`);
+        pollLiveCall(data.call_id, null, Date.now());
       })
       .catch(err => {
         btnTriggerLiveCall.disabled = false;
-        sandboxStreamLog.innerHTML += `
-          <div style="color: #e07466; margin-top: 6px;">[CALL-E ERROR] ${escapeHtml(err.message)}</div>
-        `;
+        appendSandboxLog(`<div style="color: #e07466; margin-top: 6px;">[CALL-E ERROR] ${escapeHtml(err.message)}</div>`);
       });
     });
   }
 
-  // Initial Render
+  // Initial Render — instant paint from cache/seed data, then replaced
+  // by the real server ledger the moment it loads.
   renderLedger();
+  loadRealLedger();
 
   // =========================================================================
   // Canvas & SVG Animations
