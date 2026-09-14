@@ -859,6 +859,13 @@
   renderLedger();
   loadRealLedger();
 
+  // Background poll so entries written by a completely separate process
+  // — the telephony-gate hook firing from another Claude Code session
+  // entirely, e.g. one rooted at a different project — show up here
+  // without anyone needing to manually refresh the tab. The browser has
+  // no way to know that file changed on disk otherwise.
+  setInterval(loadRealLedger, 5000);
+
   // =========================================================================
   // Canvas & SVG Animations
   // =========================================================================

@@ -18,19 +18,33 @@ inputs:
     description: 'Path to the phonebook JSON relative to workspace'
     required: false
     default: 'phonebook.json'
+  repository:
+    description: >
+      owner/repo of the calling workflow. Must be passed explicitly as
+      ${{ github.repository }} from the CALLING workflow file -- the
+      github.* context does not resolve inside a Docker action's own
+      action.yml when referenced cross-repo via `uses: owner/repo@ref`,
+      only within an actual .github/workflows/*.yml file.
+    required: true
+  event_path:
+    description: 'Pass ${{ github.event_path }} from the calling workflow.'
+    required: true
+  pr_number:
+    description: 'Pass ${{ github.event.pull_request.number }} from the calling workflow.'
+    required: true
 runs:
   using: 'docker'
   image: 'Dockerfile'
   env:
     GITHUB_TOKEN: ${{ inputs.github_token }}
-    GITHUB_REPOSITORY: ${{ github.repository }}
+    GITHUB_REPOSITORY: ${{ inputs.repository }}
     CALLE_API_KEY: ${{ inputs.calle_api_key }}
     AUDITLANE_DRESS_REHEARSAL: ${{ inputs.dress_rehearsal }}
   args:
     - --github-event
-    - ${{ github.event_path }}
+    - ${{ inputs.event_path }}
     - --pr-ref
-    - ${{ github.repository }}#${{ github.event.pull_request.number }}
+    - ${{ inputs.repository }}#${{ inputs.pr_number }}
     - --phonebook
     - ${{ inputs.phonebook_path }}
     - --post-to-github
