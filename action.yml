@@ -20,17 +20,17 @@ inputs:
     default: 'phonebook.json'
   repository:
     description: >
-      owner/repo of the calling workflow. Must be passed explicitly as
-      ${{ github.repository }} from the CALLING workflow file -- the
-      github.* context does not resolve inside a Docker action's own
-      action.yml when referenced cross-repo via `uses: owner/repo@ref`,
-      only within an actual .github/workflows/*.yml file.
+      owner/repo of the calling workflow. Must be passed explicitly
+      from the calling workflow file -- the github context does not
+      resolve inside a Docker action's own action.yml when referenced
+      cross-repo via a uses: owner/repo@ref step, only within an actual
+      workflow file under .github/workflows/.
     required: true
   event_path:
-    description: 'Pass ${{ github.event_path }} from the calling workflow.'
+    description: 'The path to the GitHub event JSON, from the calling workflow.'
     required: true
   pr_number:
-    description: 'Pass ${{ github.event.pull_request.number }} from the calling workflow.'
+    description: 'The pull request number, from the calling workflow.'
     required: true
 runs:
   using: 'docker'
