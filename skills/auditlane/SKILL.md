@@ -1,16 +1,7 @@
 ---
 name: auditlane
-description: >
-  Gates dangerous agent actions — DROP TABLE, rm -rf, terraform destroy,
-  force-push, curl-pipe-to-shell, and 19 other patterns — behind a real,
-  live phone call to a human before they're allowed to execute. Runs as a
-  Claude Code PreToolUse hook, so it sits in the harness's own execution
-  path: the agent it's guarding against cannot skip it, because it never
-  gets a choice to call it. Also audits PR text for undocumented claims
-  of verbal human approval, calling the named person to check. Both
-  share one verification core and fail closed on every error path — no
-  config, no phone on file, unreachable contact, or an internal error
-  all deny by default, never allow by default.
+description: Gates dangerous agent actions (DROP TABLE, rm -rf, terraform destroy, force-push, curl-pipe-to-shell, and 19 other patterns) behind a real, live phone call to a human before they're allowed to execute, as a Claude Code PreToolUse hook the agent cannot skip; also audits PR text for undocumented claims of verbal human approval by calling the named person to check, failing closed on every error path.
+license: MIT
 ---
 
 # AuditLane skill
@@ -95,7 +86,7 @@ pre-execution interception mechanism is a new thin adapter, not a
 rewrite of the gate. That's not a promise without evidence, either —
 `audit_pr` already ships two other integration surfaces built on the
 exact same core: standalone via the CLI
-(`scripts/run_verification.py`), or as an MCP tool
+(`run_verification.py`), or as an MCP tool
 (`auditlane/mcp_server.py`'s `telephony_verify_action`) callable from
 *any* MCP-compatible client today — Claude Desktop or otherwise. That
 path is weaker than the hook (an agent has to choose to call it, same
@@ -137,10 +128,12 @@ export AUDITLANE_HOOK_AUTHORIZER="the security lead"   # a phonebook.json key
 Leave it unset and the gate fails closed on every dangerous match — it
 never silently allows just because nobody configured an authorizer.
 
-**Preview any claim before spending a real call:**
+**Preview any claim before spending a real call** — the CLI entry point
+lives in the cloned repo's `scripts` folder as `run_verification.py`:
 
 ```bash
-python scripts/run_verification.py --dry-run --title "..." --body "..."
+cd scripts
+python run_verification.py --dry-run --title "..." --body "..."
 ```
 
 Prints the exact phone number, region, and prompt CALL-E would receive —
