@@ -95,7 +95,7 @@ This runs three full `audit_pr` scenarios (a denied claim, a resolved two-hop ch
 python scripts/serve_ui.py --port 8080
 ```
 
-Navigate to `http://localhost:8080` for the audit ledger, multi-hop verification timelines, the organization directory, a telephony-sudo sandbox, and a Voice Sandbox for direct test calls. Every real result — from any of these panels — is persisted server-side to `.auditlane_ledger.json`, not just held in browser memory.
+Navigate to `http://localhost:8080` for the audit ledger, multi-hop verification timelines, the organization directory, and a Voice Sandbox for direct test calls. Every real result — from any of these panels, or from the telephony-gate hook — is persisted server-side to `.auditlane_ledger.json`, not just held in browser memory.
 
 ### Enabling the automatic command gate
 
@@ -173,7 +173,6 @@ hooks/pretooluse_telephony_gate.py   The Claude Code PreToolUse hook itself
 scripts/
   run_verification.py     CLI entry point for audit_pr (used by the GitHub Action)
   serve_ui.py              Web dashboard + REST API
-  telephony_sudo.py        CLI voice-gated command wrapper
   git_voice_blame.py        Query voice attestations by commit SHA
 demo/dress_rehearsal.py     Zero-setup, offline, three-scenario walkthrough
 web/                         Verification Ledger Dashboard frontend

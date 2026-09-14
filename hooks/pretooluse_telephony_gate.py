@@ -2,14 +2,15 @@
 """
 Claude Code PreToolUse hook, matched to the Bash tool.
 
-The problem this solves: telephony-sudo (scripts/telephony_sudo.py) only
-gates a command if the agent chooses to run it through that wrapper —
-an honor system a careless or hallucinating agent can simply skip. This
-hook sits in the harness's own execution path instead, so it can't be
-skipped: every Bash command an agent tries to run passes through here
-BEFORE it executes. Anything matching danger_patterns.py is blocked
-until the configured authorizer verbally confirms it over a real phone
-call; everything else passes through untouched.
+The problem this solves: a CLI wrapper a human or agent has to
+deliberately invoke to gate one command only gates it if they choose to
+run it through that wrapper — an honor system a careless or
+hallucinating agent can simply skip. This hook sits in the harness's
+own execution path instead, so it can't be skipped: every Bash command
+an agent tries to run passes through here BEFORE it executes. Anything
+matching danger_patterns.py is blocked until the configured authorizer
+verbally confirms it over a real phone call; everything else passes
+through untouched.
 
 Fails closed on every error path (no authorizer configured, no phone on
 file, the call is unreachable, CALL-E itself errors) — a broken or

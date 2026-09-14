@@ -1,9 +1,10 @@
 """
 The real, durable, server-side verification ledger — every result from
 any surface that places a call or makes a gate decision (the web
-dashboard's Audit Pull Request / Voice Sandbox / telephony-sudo panels,
-and the Claude Code telephony-gate hook) is appended here, so it durably
-exists independent of any one browser tab or terminal session.
+dashboard's Voice Sandbox panel and the Claude Code telephony-gate hook)
+is appended here, so it durably exists independent of any one browser
+tab or terminal session. audit_pr does NOT write here — it runs via the
+GitHub Actions workflow and posts its verdict straight to the PR itself.
 
 Shared by scripts/serve_ui.py (the dashboard's read/write surface) and
 hooks/pretooluse_telephony_gate.py (which has no HTTP server to write

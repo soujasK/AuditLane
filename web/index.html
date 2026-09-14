@@ -18,7 +18,6 @@
         </div>
         <nav class="nav-links">
           <button class="nav-tab active" data-view="dashboard">Audits</button>
-          <button class="nav-tab" data-view="telephony-sudo">telephony-sudo</button>
           <button class="nav-tab" data-view="live-sandbox">Voice Sandbox</button>
           <button class="nav-tab" data-view="phonebook">Phonebook</button>
           <button class="nav-tab" data-view="docs">Docs</button>
@@ -144,72 +143,6 @@
           <svg id="delegationGraph" class="node-graph-svg" width="100%" height="120" style="margin: 16px 0; background: rgba(10,12,16,0.5); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); display: none;"></svg>
           <div id="detail-hops-container" class="timeline-stepper">
             <!-- Rendered per hop -->
-          </div>
-        </div>
-      </section>
-
-      <!-- ===================================================================
-           VIEW: telephony-sudo (AGENT CLI COMMAND INTERCEPTOR)
-           =================================================================== -->
-      <section id="view-telephony-sudo" class="view-section">
-        <div class="view-header">
-          <div class="view-title-group">
-            <h1>telephony-sudo — Agent CLI Sandbox Interceptor</h1>
-            <p>2-Factor Telephony Authentication for autonomous agents (Claude Code, Devin, Cursor) executing high-blast-radius terminal commands.</p>
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 360px 1fr; gap: 20px; margin-bottom: 24px;">
-          <div class="soc-card">
-            <div class="card-title">Interception Dispatcher</div>
-            <div class="card-desc">Simulate an agent attempting a privileged CLI command.</div>
-
-            <div class="form-group">
-              <label class="form-label" for="sudo-preset">Select Danger Preset</label>
-              <select id="sudo-preset" class="form-control">
-                <option value="drop-table">DROP DATABASE prod_accounts;</option>
-                <option value="terraform-destroy">terraform destroy -auto-approve</option>
-                <option value="aws-delete-role">aws iam delete-role --role-name admin</option>
-                <option value="custom">Custom Command...</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="sudo-cmd">Terminal Command</label>
-              <input type="text" id="sudo-cmd" class="form-control" value="DROP DATABASE prod_accounts;">
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="sudo-authorizer">Required Authorizer</label>
-              <select id="sudo-authorizer" class="form-control">
-                <option value="@sarah_dba" selected>@sarah_dba (Staff DBA - Denies)</option>
-                <option value="The architect">The architect (Systems Architect - Confirms)</option>
-                <option value="Random Person">Random Person (Unregistered - Fails Closed)</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="sudo-reason">Action Justification</label>
-              <input type="text" id="sudo-reason" class="form-control" value="Migration cleanup of legacy shard">
-            </div>
-
-            <button id="btn-run-sudo" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
-              Execute via telephony-sudo
-            </button>
-          </div>
-
-          <div class="terminal-window">
-            <div class="terminal-header">
-              <div class="terminal-dot dot-red"></div>
-              <div class="terminal-dot dot-yellow"></div>
-              <div class="terminal-dot dot-green"></div>
-              <span class="terminal-title">BASH / AGENT TOOL RUNNER</span>
-              <span id="sudo-term-status" style="margin-left: auto; color: #10B981;">READY</span>
-            </div>
-            <div id="sudo-terminal-output" class="terminal-body">
-              <div class="term-muted"># Autonomous agent environment initialized (Claude Code / Devin)...</div>
-              <div class="term-muted"># Type or select a command and click 'Execute via telephony-sudo' to test.</div>
-            </div>
           </div>
         </div>
       </section>
@@ -358,7 +291,7 @@ Verdict: VERIFIED / BLOCKED / NEEDS_HUMAN_REVIEW</pre>
 
           <h2>5. Every Surface Runs the Same Verification Engine</h2>
           <p style="color: var(--text-secondary); font-size: 13px;">
-            <strong>telephony-gate</strong> is a Claude Code hook — every dangerous <code>Bash</code> command an agent tries to run is intercepted here, automatically, before it executes. <strong>audit_pr</strong> runs the same way, just at a different point in the pipeline: it's wired into the GitHub Actions workflow (see section 6), so it fires automatically on every pull request, regardless of which agent — or human — opened it, with no dashboard step involved. <strong>telephony-sudo</strong> and <strong>Voice Sandbox</strong>, below, are the two surfaces you trigger directly from this dashboard — the first gates a CLI command you type in, the second places a raw test call for demoing the mechanism itself. All four, plus an MCP server for direct agent integration, call into the identical Python verification pipeline — there's exactly one code path that ever places a real call.
+            <strong>telephony-gate</strong> is a Claude Code hook — every dangerous <code>Bash</code> command an agent tries to run is intercepted here, automatically, before it executes. <strong>audit_pr</strong> runs the same way, just at a different point in the pipeline: it's wired into the GitHub Actions workflow (see section 6), so it fires automatically on every pull request, regardless of which agent — or human — opened it, with no dashboard step involved. <strong>Voice Sandbox</strong>, below, is the one surface you trigger directly from this dashboard — a raw test call for demoing the mechanism itself, with no danger-pattern matching or claim extraction involved. All three, plus an MCP server for direct agent integration, call into the identical Python verification pipeline — there's exactly one code path that ever places a real call.
           </p>
 
           <h2>6. GitHub Actions Integration Snippet</h2>

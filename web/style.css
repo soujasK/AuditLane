@@ -1045,62 +1045,6 @@ textarea.form-control {
   margin-bottom: 24px;
 }
 
-/* ==========================================================================
-   Terminal Emulator (telephony-sudo)
-   ========================================================================== */
-/* ==========================================================================
-   Terminal Emulator (telephony-sudo) - Modern Warp/iTerm Style
-   ========================================================================== */
-.terminal-window {
-  background-color: #11141D;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  font-family: var(--font-mono);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-}
-
-.terminal-header {
-  background-color: #0B0D13;
-  border-bottom: 1px solid var(--border-subtle);
-  padding: 8px 14px;
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 6px;
-}
-
-.terminal-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-.dot-red { background-color: #EF4444; }
-.dot-yellow { background-color: #F59E0B; }
-.dot-green { background-color: #10B981; }
-
-.terminal-title {
-  margin-left: 10px;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.terminal-body {
-  padding: 16px;
-  min-height: 280px;
-  max-height: 480px;
-  overflow-y: auto;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--text-primary);
-}
-
-.term-frozen { color: #EF4444; } /* Red for [SIGSTOP] */
-.term-success { color: #10B981; } /* Emerald for [SIGCONT] */
-.term-error { color: #EF4444; } /* Red for [SIGKILL] */
-.term-muted { color: var(--text-muted); }
-
 /* SVG Graph Animations */
 @keyframes dashOffset {
   to { stroke-dashoffset: -20; }

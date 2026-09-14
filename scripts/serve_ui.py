@@ -43,9 +43,6 @@ _pending_live_calls: dict[str, dict] = {}
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-import hashlib
-
-from auditlane.attestation import create_voice_attestation, save_attestation
 from auditlane.claim_extractor import extract_claims_from_pr
 from auditlane.config import Config
 from auditlane.verifier import AuditLaneVerifier
@@ -372,113 +369,6 @@ class AuditLaneHandler(SimpleHTTPRequestHandler):
                 payload = json.loads(raw_body)
                 save_phonebook(payload)
                 data = json.dumps({"status": "saved"}).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-            except Exception as e:
-                err_data = json.dumps({"error": str(e)}).encode("utf-8")
-                self.send_response(500)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(err_data)))
-                self.end_headers()
-                self.wfile.write(err_data)
-            return
-        elif self.path == "/api/telephony-sudo":
-            content_len = int(self.headers.get("Content-Length", 0))
-            raw_body = self.rfile.read(content_len).decode("utf-8")
-            try:
-                payload = json.loads(raw_body)
-                cmd = payload.get("command", "")
-                authorizer = payload.get("authorizer", "@sarah_dba")
-                reason = payload.get("reason", "Privileged action")
-                
-                phonebook = load_phonebook()
-                phone = phonebook.get(authorizer.lower(), "+15550001111")
-                
-                # Use live mode only if explicitly requested and phone is not a 555 dummy
-                is_live = payload.get("live", False) and bool(phone) and ("555" not in phone)
-                base_cfg = Config.from_env()
-                call_cfg = base_cfg if is_live else Config(
-                    dress_rehearsal=True,
-                    calle_api_key=base_cfg.calle_api_key,
-                    calle_base_url=base_cfg.calle_base_url,
-                    entailment_confidence_threshold=base_cfg.entailment_confidence_threshold,
-                    max_hops=base_cfg.max_hops,
-                    max_call_duration_seconds=base_cfg.max_call_duration_seconds,
-                )
-                client = CalleVerificationClient(call_cfg)
-                claim = Claim(
-                    authorizer_name=authorizer,
-                    claim_text=f"Authorize command: '{cmd}' for reason: '{reason}'",
-                    subject=reason,
-                    source_line=cmd,
-                )
-                res = client.verify_claim(claim, phone)
-                authorized = (res.direct_confirmation == Confirmation.CONFIRMED)
-
-                # Was previously a fake hash()-based ID that never
-                # corresponded to any real saved/signed record, even
-                # though the frontend log claims "(HMAC-SHA256 Signed)".
-                # Use the real attestation system, same as the CLI
-                # telephony-sudo script and the PR-audit path.
-                attestation_id = None
-                if authorized:
-                    attest = create_voice_attestation(
-                        commit_sha=hashlib.sha256(cmd.encode("utf-8")).hexdigest()[:10],
-                        pr_reference="web-telephony-sudo",
-                        authorizer_name=authorizer,
-                        phone_number=phone,
-                        statement=res.authorizer_statement,
-                        call_uuid=res.call_uuid or None,
-                        audio_sha256=res.audio_sha256 or None,
-                        verdict="VERIFIED",
-                    )
-                    save_attestation(attest, base_dir=BASE_DIR)
-                    attestation_id = attest.attestation_id
-
-                resp_data = {
-                    "authorized": authorized,
-                    "command": cmd,
-                    "authorizer": authorizer,
-                    "durationSec": res.call_duration_seconds,
-                    "statement": res.authorizer_statement,
-                    "confirmation": res.direct_confirmation.value,
-                    "attestation_id": attestation_id,
-                    "mode": "live" if is_live else "dress_rehearsal",
-                }
-                append_ledger({
-                    "id": "sudo_" + (attestation_id or hashlib.sha256(cmd.encode()).hexdigest()[:10]),
-                    "prRef": "telephony-sudo#" + hashlib.sha256(cmd.encode()).hexdigest()[:8],
-                    "title": "telephony-sudo: " + cmd,
-                    "body": reason,
-                    "commitSha": hashlib.sha256(cmd.encode()).hexdigest()[:10],
-                    "authorizer": authorizer,
-                    "timestamp": "Just now",
-                    "verdict": "VERIFIED" if authorized else ("BLOCKED" if res.direct_confirmation == Confirmation.DENIED else "NEEDS_HUMAN_REVIEW"),
-                    "reason": f"telephony-sudo direct call — no entailment scoring applied. Raw confirmation: {res.direct_confirmation.value}.",
-                    "policy": "telephony-sudo — Direct Call Gate",
-                    "engine": "n/a (raw call, no entailment)",
-                    "attestation_id": attestation_id,
-                    "hops": [{
-                        "hopIndex": 0,
-                        "authorizer": authorizer,
-                        "role": "telephony-sudo Gate Contact",
-                        "phone": phone,
-                        "reached": bool(res.reachable),
-                        "durationSec": res.call_duration_seconds,
-                        "claimText": claim.claim_text,
-                        "statement": res.authorizer_statement,
-                        "confirmation": res.direct_confirmation.value,
-                        "entailmentResult": "n/a",
-                        "confidence": "n/a",
-                        "engine": "n/a",
-                        "callUuid": res.call_uuid or None,
-                        "audioSha256": res.audio_sha256 or None,
-                    }],
-                })
-                data = json.dumps(resp_data).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(data)))

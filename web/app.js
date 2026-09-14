@@ -214,12 +214,12 @@
 
   // Ledger persistence. Real source of truth is now the server's
   // .auditlane_ledger.json (see scripts/serve_ui.py and auditlane/ledger.py
-  // — every real call result, from telephony-gate (the Claude Code hook),
-  // Voice Sandbox, or telephony-sudo, gets appended there, durably,
-  // independent of any browser). This array/localStorage pair is kept as
-  // a fast-render cache and offline fallback only, not the authoritative
-  // store anymore. audit_pr no longer writes here at all — it runs via
-  // the GitHub Actions workflow and posts straight to the PR itself.
+  // — every real call result, from telephony-gate (the Claude Code hook) or
+  // Voice Sandbox, gets appended there, durably, independent of any
+  // browser). This array/localStorage pair is kept as a fast-render cache
+  // and offline fallback only, not the authoritative store anymore.
+  // audit_pr doesn't write here at all — it runs via the GitHub Actions
+  // workflow and posts straight to the PR itself.
   const LEDGER_STORAGE_KEY = 'auditlane_ledger_v1';
 
   function persistAudits() {
@@ -272,7 +272,6 @@
   const tabs = document.querySelectorAll('.nav-tab');
   const viewDashboard = document.getElementById('view-dashboard');
   const viewDetail = document.getElementById('view-detail');
-  const viewTelephonySudo = document.getElementById('view-telephony-sudo');
   const viewLiveSandbox = document.getElementById('view-live-sandbox');
   const viewPhonebook = document.getElementById('view-phonebook');
   const viewDocs = document.getElementById('view-docs');
@@ -288,7 +287,6 @@
 
     if (viewName === 'dashboard') viewDashboard.classList.add('active');
     else if (viewName === 'detail') viewDetail.classList.add('active');
-    else if (viewName === 'telephony-sudo') viewTelephonySudo.classList.add('active');
     else if (viewName === 'live-sandbox') viewLiveSandbox.classList.add('active');
     else if (viewName === 'phonebook') {
       viewPhonebook.classList.add('active');
@@ -699,110 +697,6 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
-  }
-
-  // =========================================================================
-  // telephony-sudo Sandbox Controller
-  // =========================================================================
-  const sudoPreset = document.getElementById('sudo-preset');
-  const sudoCmd = document.getElementById('sudo-cmd');
-  const sudoAuthorizer = document.getElementById('sudo-authorizer');
-  const sudoReason = document.getElementById('sudo-reason');
-  const sudoTermOutput = document.getElementById('sudo-terminal-output');
-  const sudoTermStatus = document.getElementById('sudo-term-status');
-  const btnRunSudo = document.getElementById('btn-run-sudo');
-
-  if (sudoPreset) {
-    sudoPreset.addEventListener('change', () => {
-      const val = sudoPreset.value;
-      if (val === 'drop-table') {
-        sudoCmd.value = 'DROP DATABASE prod_accounts;';
-        sudoAuthorizer.value = '@sarah_dba';
-        sudoReason.value = 'Migration cleanup of legacy shard';
-      } else if (val === 'terraform-destroy') {
-        sudoCmd.value = 'terraform destroy -auto-approve';
-        sudoAuthorizer.value = 'The architect';
-        sudoReason.value = 'Deprecate staging cluster';
-      } else if (val === 'aws-delete-role') {
-        sudoCmd.value = 'aws iam delete-role --role-name admin';
-        sudoAuthorizer.value = 'Random Person';
-        sudoReason.value = 'Prune unused IAM entities';
-      }
-    });
-  }
-
-  if (btnRunSudo) {
-    btnRunSudo.addEventListener('click', () => {
-      const cmd = sudoCmd.value.trim();
-      const auth = sudoAuthorizer.value;
-      const reason = sudoReason.value.trim();
-
-      if (!cmd) return;
-
-      btnRunSudo.disabled = true;
-      sudoTermStatus.textContent = 'FROZEN';
-      sudoTermStatus.style.color = '#C9A227';
-
-      function logTerminal(message, type) {
-        let color = 'var(--text-muted)';
-        let prefix = '[AuditLane]';
-        if (type === 'freeze') {
-          color = '#EF4444';
-          prefix = '[SIGSTOP]';
-        } else if (type === 'unfreeze') {
-          color = '#10B981';
-          prefix = '[SIGCONT]';
-        } else if (type === 'kill') {
-          color = '#EF4444';
-          prefix = '[SIGKILL]';
-        }
-        sudoTermOutput.innerHTML += `<div style="color: ${color};"><strong>${prefix}</strong> ${escapeHtml(message)}</div>`;
-        sudoTermOutput.scrollTop = sudoTermOutput.scrollHeight;
-      }
-
-      sudoTermOutput.innerHTML += `
-        <div style="margin-top: 12px; border-top: 1px solid var(--border-subtle); padding-top: 8px;">
-          <span style="color: #6366F1;">$</span> <strong>${escapeHtml(cmd)}</strong>
-        </div>`;
-        
-      logTerminal('INTERCEPTED: High-blast-radius command detected.', 'freeze');
-      logTerminal(`FROZEN: Process suspended. Awaiting verbal clearance from ${auth}...`, 'freeze');
-      logTerminal(`CALL-E dialing registered line... Liveness Nonce: Meridian-42`, 'info');
-
-      fetch('/api/telephony-sudo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: cmd, authorizer: auth, reason: reason })
-      })
-      .then(res => res.json())
-      .then(data => {
-        btnRunSudo.disabled = false;
-        if (data.authorized) {
-          sudoTermStatus.textContent = 'EXECUTED';
-          sudoTermStatus.style.color = '#10B981';
-          logTerminal(`AUTHORIZATION CONFIRMED: "${data.statement}"`, 'unfreeze');
-          logTerminal(`Attestation ID: ${data.attestation_id} (HMAC-SHA256 Signed)`, 'info');
-          logTerminal('Process unfrozen. Executing command in sandbox...', 'info');
-          sudoTermOutput.innerHTML += `<div style="color: #10B981; font-weight: 600; margin-top: 4px;">&gt;&gt; Command completed successfully (Exit code 0).</div>`;
-        } else {
-          sudoTermStatus.textContent = 'KILLED';
-          sudoTermStatus.style.color = '#EF4444';
-          logTerminal(`ACCESS DENIED: ${auth} rejected authorization.`, 'kill');
-          logTerminal(`Statement: "${data.statement || 'No verbal authorization given.'}"`, 'kill');
-          logTerminal('SECURITY ABORT: Terminating process (Exit code 1).', 'kill');
-        }
-        sudoTermOutput.scrollTop = sudoTermOutput.scrollHeight;
-        loadRealLedger();
-      })
-      .catch(err => {
-        btnRunSudo.disabled = false;
-        sudoTermStatus.textContent = 'READY';
-        sudoTermStatus.style.color = '#79c99e';
-        sudoTermOutput.innerHTML += `
-          <div class="term-error">[telephony-sudo] Execution error: ${escapeHtml(err.message)}</div>
-        `;
-      });
-    });
   }
 
   // =========================================================================
