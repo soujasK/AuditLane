@@ -26,9 +26,6 @@ inputs:
       cross-repo via a uses: owner/repo@ref step, only within an actual
       workflow file under .github/workflows/.
     required: true
-  event_path:
-    description: 'The path to the GitHub event JSON, from the calling workflow.'
-    required: true
   pr_number:
     description: 'The pull request number, from the calling workflow.'
     required: true
@@ -40,9 +37,12 @@ runs:
     GITHUB_REPOSITORY: ${{ inputs.repository }}
     CALLE_API_KEY: ${{ inputs.calle_api_key }}
     AUDITLANE_DRESS_REHEARSAL: ${{ inputs.dress_rehearsal }}
+  # No --github-event arg: the script falls back to this container's own
+  # GITHUB_EVENT_PATH (auto-injected by the runner, already correctly
+  # pointing at the in-container mount) instead of a host-side path that
+  # doesn't resolve to anything inside the container -- see
+  # scripts/run_verification.py.
   args:
-    - --github-event
-    - ${{ inputs.event_path }}
     - --pr-ref
     - ${{ inputs.repository }}#${{ inputs.pr_number }}
     - --phonebook

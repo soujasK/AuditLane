@@ -28,5 +28,4 @@ jobs:
           dress_rehearsal: ${{ vars.AUDITLANE_DRESS_REHEARSAL || 'true' }}
           phonebook_path: phonebook.json
           repository: ${{ github.repository }}
-          event_path: ${{ github.event_path }}
           pr_number: ${{ github.event.pull_request.number }}

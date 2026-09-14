@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -131,8 +132,17 @@ def main() -> int:
 
     title, body, pr_number, commit_sha = args.title, args.body, args.pr_number, args.commit_sha
 
-    if args.github_event:
-        title, body, gh_number, gh_sha, _repo = _load_from_github_event(args.github_event)
+    # --github-event may be an explicit CLI path (local/manual runs), but
+    # when this runs as a Docker GitHub Action, ${{ github.event_path }}
+    # evaluated in the calling workflow is a HOST filesystem path that
+    # doesn't exist inside this container -- Docker remaps that directory
+    # to a different mount point. GITHUB_EVENT_PATH in this process's own
+    # environment is the one GitHub already correctly rewrites for
+    # whatever container is reading it, so prefer that when no explicit
+    # path was given.
+    github_event_path = args.github_event or os.environ.get("GITHUB_EVENT_PATH")
+    if github_event_path:
+        title, body, gh_number, gh_sha, _repo = _load_from_github_event(github_event_path)
         pr_number = pr_number or gh_number
         commit_sha = commit_sha or gh_sha
 
