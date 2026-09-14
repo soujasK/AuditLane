@@ -6,6 +6,8 @@ Built for [CALL-E: Your Code Is Calling](https://call-e.devpost.com/). Uses CALL
 
 **Hackathon skill contribution (real, open, mergeable):** [CALLE-AI/awesome-phone-call-agents#700](https://github.com/CALLE-AI/awesome-phone-call-agents/pull/700)
 
+**What CALL-E is, briefly:** an API that lets a piece of software place a real outbound phone call to a real person and have a structured conversation with them, returning a transcript and a parsed result. AuditLane uses it as the one verification channel a digital-only system doesn't have — a live, unscripted, in-the-moment human account.
+
 ---
 
 ## Inspiration
