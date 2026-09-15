@@ -1,6 +1,6 @@
 ---
 name: auditlane
-description: Gates dangerous agent actions (DROP TABLE, rm -rf, terraform destroy, force-push, curl-pipe-to-shell, and 19 other patterns) behind a real, live phone call to a human before they're allowed to execute, as a Claude Code PreToolUse hook the agent cannot skip; also audits PR text for undocumented claims of verbal human approval by calling the named person to check, failing closed on every error path.
+description: Gates dangerous agent actions (DROP TABLE, rm -rf, terraform destroy, force-push, curl-pipe-to-shell, and 36 other patterns) behind a real, live phone call to a human before they're allowed to execute, as a Claude Code PreToolUse hook the agent cannot skip; also audits PR text for undocumented claims of verbal human approval by calling the named person to check, failing closed on every error path.
 license: MIT
 ---
 
@@ -97,7 +97,7 @@ one example, not the only one.
 
 **Why Claude Code specifically, not a hypothetical universal target:**
 something that provably works against one real, currently-widely-used
-agent's actual execution path — 127 tests, fired live against a real
+agent's actual execution path — 175 tests, fired live against a real
 `Bash` tool call during development, two real crash bugs found and
 fixed by adversarial testing before anyone else ever saw it — is a
 stronger claim than something written to theoretically work everywhere
@@ -186,11 +186,11 @@ Run from within a clone of AuditLane (see the top of this file):
 python -m pytest tests/ -v
 ```
 
-127 tests, all offline, no network access or API key required:
+175 tests, all offline, no network access or API key required:
 - Core verification pipeline: claim extraction, entailment scoring,
   multi-hop chains, fail-closed decision policy
-- `test_danger_patterns.py` — 85 cases: 49 real dangerous commands
-  (all correctly flagged) and 31 safe/near-miss commands specifically
+- `test_danger_patterns.py` — 133 cases: 76 real dangerous commands
+  (all correctly flagged) and 54 safe/near-miss commands specifically
   chosen to catch false positives (`git branch -d` vs `-D`,
   `UPDATE ... WHERE` vs unscoped, `npm run publish` vs `npm publish`)
 - `test_hook_robustness.py` — 18 cases proving the hook cannot crash on

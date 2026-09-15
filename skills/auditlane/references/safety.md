@@ -65,7 +65,7 @@ is deliberately biased toward over-matching: a false positive costs one
 phone call, a false negative is the actual failure mode that matters.
 See
 [`tests/test_danger_patterns.py`](https://github.com/soujasK/AuditLane/blob/main/tests/test_danger_patterns.py)
-(85 cases) for the exact commands it does and doesn't flag, including
+(133 cases) for the exact commands it does and doesn't flag, including
 near-misses chosen specifically to probe for false positives.
 
 ## Rate limiting

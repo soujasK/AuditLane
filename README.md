@@ -36,7 +36,7 @@ Most of the real bugs only showed up by actually running things for real, not by
 
 ## Accomplishments that we're proud of
 
-Every claim in this project is backed by something that actually happened, not simulated: real live phone calls placed and answered, both the block and the confirm path, through both the hook and the GitHub Action, with real transcripts and real status checks gating a real PR. 127 tests, all offline, including a dedicated adversarial suite whose entire job is proving the hook cannot crash into an ambiguous, possibly-unsafe state no matter what garbage hits its stdin.
+Every claim in this project is backed by something that actually happened, not simulated: real live phone calls placed and answered, both the block and the confirm path, through both the hook and the GitHub Action, with real transcripts and real status checks gating a real PR. 175 tests, all offline, including a dedicated adversarial suite whose entire job is proving the hook cannot crash into an ambiguous, possibly-unsafe state no matter what garbage hits its stdin.
 
 ## What we learned
 
@@ -50,7 +50,7 @@ LLM-based claim extraction for higher recall on messier phrasing than the curren
 
 ## Two capabilities, one verification core
 
-**`telephony-gate`** — a Claude Code `PreToolUse` hook. Every `Bash` command an agent tries to run passes through it *before execution*, unconditionally — the agent has no code path that skips it. If the command matches a dangerous pattern (`DROP TABLE`, `rm -rf`, `terraform destroy`, `curl | bash`, force-push, and 18 others — see `auditlane/danger_patterns.py`), execution is blocked until a real, live phone call to a configured human is explicitly confirmed.
+**`telephony-gate`** — a Claude Code `PreToolUse` hook. Every `Bash` command an agent tries to run passes through it *before execution*, unconditionally — the agent has no code path that skips it. If the command matches a dangerous pattern (`DROP TABLE`, `rm -rf`, `terraform destroy`, `curl | bash`, force-push, and 36 others — see `auditlane/danger_patterns.py`), execution is blocked until a real, live phone call to a configured human is explicitly confirmed.
 
 **`audit_pr`** — the original capability. Scans a PR's title/body for claims of undocumented verbal authorization ("confirmed with X", "the architect verbally cleared this"), places a call to the named person, compares their statement against the claim, and returns `verified`, `blocked`, or `needs_human_review`.
 
@@ -120,7 +120,7 @@ The CALL-E prompt asks for **open, unprompted recall first** ("what did you disc
 
 ## Why Claude Code specifically
 
-Most comparable "agent skill" write-ups are platform-agnostic instruction patterns any capable agent could theoretically follow. `telephony-gate` is deliberately different: its entire value is that the gate is a *real interception point an agent cannot skip*, and that guarantee only exists because it's built against Claude Code's actual `PreToolUse` hook contract, not a documented convention. Something proven to work against one real, currently-widely-used agent's actual execution path — 127 tests, fired live during development, two real crash bugs found and fixed by adversarial testing — is a stronger claim than something theoretically universal but verified nowhere. The verification core underneath has zero Claude Code coupling, though — see `skills/auditlane/SKILL.md` for exactly what's portable and what a new adapter for another agent host would need.
+Most comparable "agent skill" write-ups are platform-agnostic instruction patterns any capable agent could theoretically follow. `telephony-gate` is deliberately different: its entire value is that the gate is a *real interception point an agent cannot skip*, and that guarantee only exists because it's built against Claude Code's actual `PreToolUse` hook contract, not a documented convention. Something proven to work against one real, currently-widely-used agent's actual execution path — 175 tests, fired live during development, two real crash bugs found and fixed by adversarial testing — is a stronger claim than something theoretically universal but verified nowhere. The verification core underneath has zero Claude Code coupling, though — see `skills/auditlane/SKILL.md` for exactly what's portable and what a new adapter for another agent host would need.
 
 ## Quickstart — see it work in 10 seconds, no API key
 
@@ -203,7 +203,7 @@ See `action.yml` and `.github/workflows/` — runs on every PR, posts the verdic
 ```
 auditlane/
   claim_extractor.py    Rule-based extraction of verbal-authorization claims
-  danger_patterns.py     22-category regex detection for telephony-gate
+  danger_patterns.py     39-category regex detection for telephony-gate
   calle_client.py        CALL-E task/schema builders + real SDK client + mock backend
   entailment.py           Heuristic (default) and optional transformer NLI engines
   verifier.py             Multi-hop orchestration + fail-closed decision policy
@@ -218,7 +218,7 @@ scripts/
   git_voice_blame.py        Query voice attestations by commit SHA
 demo/dress_rehearsal.py     Zero-setup, offline, three-scenario walkthrough
 web/                         Verification Ledger Dashboard frontend
-tests/                       127 unit/integration/stress tests, all offline
+tests/                       175 unit/integration/stress tests, all offline
 docs/SAFETY.md                Read before ever going live
 docs/RUBRIC_MAPPING.md         How this maps to the hackathon's judging criteria
 skills/auditlane/            Packaged as a reusable Agent Skill contribution
