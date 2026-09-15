@@ -97,7 +97,7 @@ one example, not the only one.
 
 **Why Claude Code specifically, not a hypothetical universal target:**
 something that provably works against one real, currently-widely-used
-agent's actual execution path — 129 tests, fired live against a real
+agent's actual execution path — 127 tests, fired live against a real
 `Bash` tool call during development, two real crash bugs found and
 fixed by adversarial testing before anyone else ever saw it — is a
 stronger claim than something written to theoretically work everywhere
@@ -186,7 +186,7 @@ Run from within a clone of AuditLane (see the top of this file):
 python -m pytest tests/ -v
 ```
 
-129 tests, all offline, no network access or API key required:
+127 tests, all offline, no network access or API key required:
 - Core verification pipeline: claim extraction, entailment scoring,
   multi-hop chains, fail-closed decision policy
 - `test_danger_patterns.py` — 85 cases: 49 real dangerous commands

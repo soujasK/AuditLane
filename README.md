@@ -120,7 +120,7 @@ The CALL-E prompt asks for **open, unprompted recall first** ("what did you disc
 
 ## Why Claude Code specifically
 
-Most comparable "agent skill" write-ups are platform-agnostic instruction patterns any capable agent could theoretically follow. `telephony-gate` is deliberately different: its entire value is that the gate is a *real interception point an agent cannot skip*, and that guarantee only exists because it's built against Claude Code's actual `PreToolUse` hook contract, not a documented convention. Something proven to work against one real, currently-widely-used agent's actual execution path — 129 tests, fired live during development, two real crash bugs found and fixed by adversarial testing — is a stronger claim than something theoretically universal but verified nowhere. The verification core underneath has zero Claude Code coupling, though — see `skills/auditlane/SKILL.md` for exactly what's portable and what a new adapter for another agent host would need.
+Most comparable "agent skill" write-ups are platform-agnostic instruction patterns any capable agent could theoretically follow. `telephony-gate` is deliberately different: its entire value is that the gate is a *real interception point an agent cannot skip*, and that guarantee only exists because it's built against Claude Code's actual `PreToolUse` hook contract, not a documented convention. Something proven to work against one real, currently-widely-used agent's actual execution path — 127 tests, fired live during development, two real crash bugs found and fixed by adversarial testing — is a stronger claim than something theoretically universal but verified nowhere. The verification core underneath has zero Claude Code coupling, though — see `skills/auditlane/SKILL.md` for exactly what's portable and what a new adapter for another agent host would need.
 
 ## Quickstart — see it work in 10 seconds, no API key
 
@@ -218,7 +218,7 @@ scripts/
   git_voice_blame.py        Query voice attestations by commit SHA
 demo/dress_rehearsal.py     Zero-setup, offline, three-scenario walkthrough
 web/                         Verification Ledger Dashboard frontend
-tests/                       129 unit/integration/stress tests, all offline
+tests/                       127 unit/integration/stress tests, all offline
 docs/SAFETY.md                Read before ever going live
 docs/RUBRIC_MAPPING.md         How this maps to the hackathon's judging criteria
 skills/auditlane/            Packaged as a reusable Agent Skill contribution
