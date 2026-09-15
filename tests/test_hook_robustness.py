@@ -44,10 +44,15 @@ def _isolated_env(tmp_path: Path) -> dict:
        auditlane/ledger.py), polluting it with dozens of synthetic
        "rm -rf /data" / "DROP TABLE users" entries on every test run.
        Redirected to a per-test tmp file instead.
+    3. AUDITLANE_CALL_BUDGET_PATH — same reasoning as #2, for
+       auditlane/calle_client.py's call-budget guard. Not currently
+       reachable in these tests (dress rehearsal never touches it), but
+       isolated anyway so it can never silently start mattering later.
     """
     env = dict(os.environ)
     env["AUDITLANE_DRESS_REHEARSAL"] = "true"
     env["AUDITLANE_LEDGER_PATH"] = str(tmp_path / "test_ledger.json")
+    env["AUDITLANE_CALL_BUDGET_PATH"] = str(tmp_path / "test_call_budget.json")
     return env
 
 CASES = [

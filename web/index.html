@@ -40,8 +40,8 @@
       <section id="view-dashboard" class="view-section active">
         <div class="view-header">
           <div class="view-title-group">
-            <h1>Pull Request Verification Ledger</h1>
-            <p>Cryptographic record of verbal authorization claims extracted from PRs and verified via CALL-E telephony.</p>
+            <h1>Verification Ledger</h1>
+            <p>Every telephony-gate command decision and audit_pr claim check, verified via real CALL-E phone calls.</p>
           </div>
           <div class="metric-summary" style="display: flex; gap: 16px; font-family: var(--font-mono); font-size: 11px;">
             <div><span style="color: var(--text-muted)">TOTAL AUDITED:</span> <strong id="metric-total">0</strong></div>
@@ -193,11 +193,8 @@
             </div>
             <div class="card-desc">Real-time status of the telephony session, audio hash, and NLI entailment.</div>
 
-            <div id="sandbox-stream-log" class="claim-block" style="min-height: 240px; font-size: 11px; line-height: 1.8; position: relative;">
-              <div class="waveform-container" style="position: absolute; bottom: 10px; left: 10px; width: 380px;">
-                <canvas id="waveformCanvas" width="380" height="64"></canvas>
-              </div>
-              <span id="sandbox-status-text" style="color: var(--text-muted); position: relative; z-index: 2;">Awaiting live call dispatch trigger...</span>
+            <div id="sandbox-stream-log" class="claim-block" style="min-height: 240px; font-size: 11px; line-height: 1.8;">
+              <span id="sandbox-status-text" style="color: var(--text-muted);">Awaiting live call dispatch trigger...</span>
             </div>
           </div>
         </div>

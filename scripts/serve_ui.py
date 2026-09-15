@@ -25,6 +25,19 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB_DIR = os.path.join(BASE_DIR, "web")
 PHONEBOOK_PATH = os.path.join(BASE_DIR, "phonebook.json")
 
+# Explicit, unconditional -- previously this relied on some other code
+# path (e.g. Config.from_env(), called from inside a POST handler)
+# happening to run first and load .env as a side effect. If /api/ledger
+# (a plain GET reading os.environ directly for GITHUB_TOKEN) was the
+# first endpoint hit in a fresh server process, .env was never loaded
+# and it silently saw nothing. Load it here, once, unconditionally, so
+# every handler can rely on it regardless of request order.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(BASE_DIR, ".env"))
+except ImportError:
+    pass
+
 # call_id -> True once a streamed live call has been finalized (parsed,
 # ledger-appended). Guards against double-appending the same result if
 # the frontend's poll loop checks status more than once after the call
@@ -49,7 +62,29 @@ from auditlane.verifier import AuditLaneVerifier
 from auditlane.models import VerificationOutcome, Confirmation, EntailmentLabel, Verdict, Claim
 from auditlane.calle_client import CalleVerificationClient
 from auditlane.github_integration import post_pr_comment, set_commit_status
+from auditlane.github_ledger_sync import fetch_github_audit_entries
 from auditlane.ledger import load_ledger, append_ledger, LEDGER_PATH
+
+# audit_pr runs on GitHub's own remote runners, not this machine, so it
+# has no local ledger to write to -- see auditlane/github_ledger_sync.py.
+# Cached with a short TTL rather than hit the GitHub API on every
+# /api/ledger poll (the dashboard polls every 5s on its own).
+_GITHUB_LEDGER_CACHE: dict = {"entries": [], "fetched_at": 0.0}
+_GITHUB_LEDGER_TTL_SEC = 15
+
+
+def _get_github_ledger_entries() -> list[dict]:
+    import time
+    now = time.time()
+    if now - _GITHUB_LEDGER_CACHE["fetched_at"] < _GITHUB_LEDGER_TTL_SEC:
+        return _GITHUB_LEDGER_CACHE["entries"]
+
+    token = os.environ.get("GITHUB_TOKEN", "")
+    repos = [r for r in os.environ.get("AUDITLANE_WATCH_REPOS", "").split(",") if r.strip()]
+    entries = fetch_github_audit_entries(token, repos) if (token and repos) else []
+    _GITHUB_LEDGER_CACHE["entries"] = entries
+    _GITHUB_LEDGER_CACHE["fetched_at"] = now
+    return entries
 
 
 def _resolve_audit_config(base_cfg: Config, phonebook: dict, title: str, body: str) -> Config:
@@ -243,7 +278,8 @@ class AuditLaneHandler(SimpleHTTPRequestHandler):
             self._send_json(load_phonebook())
             return
         elif path == "/api/ledger":
-            self._send_json(load_ledger())
+            merged = _get_github_ledger_entries() + load_ledger()
+            self._send_json(merged)
             return
         elif path == "/api/live-call/events":
             call_id = (query.get("call_id") or [""])[0]

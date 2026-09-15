@@ -520,12 +520,6 @@
         entailBadge = '<span style="color: #e2b350; font-weight: 600;">NEUTRAL / HEDGE</span>';
       }
 
-      // Generate visual waveform bars
-      const waveBars = Array.from({ length: 36 }, (_, i) => {
-        const height = Math.floor(6 + Math.sin(i * 0.5) * 12 + Math.random() * 8);
-        return `<div class="wave-bar active" style="height: ${height}px;"></div>`;
-      }).join('');
-
       hopEl.innerHTML = `
         <div class="hop-marker active">${hop.hopIndex}</div>
         <div class="hop-card">
@@ -549,14 +543,10 @@
               <div class="section-label">CALL-E Telephony Transcript (Free Recall First)</div>
               <div class="transcript-block">${escapeHtml(hop.statement)}</div>
               
-              <!-- Waveform is decorative only — CALL-E's API exposes call
+              <!-- No audio player, no waveform — CALL-E's API exposes call
                    transcripts, not recorded audio, so there's nothing
-                   real to play back. A "play" button here previously
-                   just showed a fake alert claiming to play audio. -->
-              <div class="audio-player-card">
-                <div class="waveform-container">${waveBars}</div>
-                <span class="mono-cell" style="font-size: 11px; color: var(--text-muted);">${hop.durationSec}s call duration &bull; transcript above is the full real record</span>
-              </div>
+                   real to visualize or play back. Just the fact, in text. -->
+              <div class="mono-cell" style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">${hop.durationSec}s call duration &bull; transcript above is the full real record (CALL-E provides no audio recording)</div>
             </div>
 
             <div class="entailment-metric-bar">
@@ -824,12 +814,8 @@
 
       btnTriggerLiveCall.disabled = true;
       sandboxStreamLog.innerHTML = `
-        <div class="waveform-container" style="position: absolute; bottom: 10px; left: 10px; width: 380px;">
-          <canvas id="waveformCanvas" width="380" height="64"></canvas>
-        </div>
-        <div style="color: #6366F1; position: relative; z-index: 2;">[CALL-E DISPATCHER] Initiating call to ${escapeHtml(name)} (${escapeHtml(phone || 'Simulated Line')})...</div>
+        <div style="color: #6366F1;">[CALL-E DISPATCHER] Initiating call to ${escapeHtml(name)} (${escapeHtml(phone || 'Simulated Line')})...</div>
       `;
-      window.startLiveWaveform();
 
       fetch('/api/live-call/start', {
         method: 'POST',
@@ -867,61 +853,8 @@
   setInterval(loadRealLedger, 5000);
 
   // =========================================================================
-  // Canvas & SVG Animations
+  // SVG Animations
   // =========================================================================
-  let waveAnimId;
-  let isStreaming = false;
-
-  window.startLiveWaveform = function() {
-    isStreaming = true;
-    const canvas = document.getElementById('waveformCanvas');
-    if (!canvas) return;
-    
-    // High-DPI scaling
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-    
-    const width = rect.width;
-    const height = rect.height;
-    
-    let offset = 0;
-    
-    function draw() {
-      ctx.clearRect(0, 0, width, height);
-      
-      const numBars = 64;
-      const barWidth = 3;
-      const spacing = (width - numBars * barWidth) / (numBars - 1);
-      
-      for (let i = 0; i < numBars; i++) {
-        const x = i * (barWidth + spacing);
-        let barHeight = 4; // idle state
-        
-        if (isStreaming) {
-           const wave1 = Math.sin(i * 0.2 + offset) * 10;
-           const wave2 = Math.cos(i * 0.1 - offset * 1.5) * 8;
-           barHeight = 4 + Math.abs(wave1 + wave2) + Math.random() * 4;
-        }
-        
-        ctx.fillStyle = '#6366F1';
-        ctx.fillRect(x, height / 2 - barHeight / 2, barWidth, barHeight);
-      }
-      
-      offset += 0.1;
-      waveAnimId = requestAnimationFrame(draw);
-    }
-    
-    cancelAnimationFrame(waveAnimId);
-    draw();
-    
-    // Stop after 5 seconds to simulate end of call
-    setTimeout(() => { isStreaming = false; }, 5000);
-  }
-  
   window.renderDelegationGraph = function(hops) {
     const svg = document.getElementById('delegationGraph');
     if (!svg) return;

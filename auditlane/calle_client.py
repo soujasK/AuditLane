@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
@@ -23,7 +24,24 @@ from .models import CallResult, Claim, Confirmation
 # Local, on-disk ledger of live calls actually placed — see
 # CalleVerificationClient._check_and_record_call_budget. Gitignored;
 # delete it (or bump AUDITLANE_MAX_LIVE_CALLS) to reset after topping up.
-_CALL_BUDGET_FILE = Path(".auditlane_call_budget.json")
+#
+# Deliberately NOT a bare relative path (that was the bug: it used to be
+# Path(".auditlane_call_budget.json"), which resolves against whatever
+# the CURRENT PROCESS's working directory happens to be. The hook is
+# specifically meant to be invoked from OTHER projects' directories
+# (that's the whole point of a portable gate) — so every real call
+# placed from e.g. a "shopfast" Claude Code session was silently
+# writing (and reading) this file inside shopfast instead of here,
+# meaning the guard was tracking a budget that reset itself per-project
+# instead of a real global cap. Anchored to this file's own location
+# instead, same fix already applied to LEDGER_PATH in ledger.py, with
+# the same AUDITLANE_CALL_BUDGET_PATH env override for tests.
+_ROOT_DIR = Path(__file__).resolve().parents[1]
+_CALL_BUDGET_FILE = (
+    Path(os.environ["AUDITLANE_CALL_BUDGET_PATH"])
+    if os.environ.get("AUDITLANE_CALL_BUDGET_PATH")
+    else _ROOT_DIR / ".auditlane_call_budget.json"
+)
 
 
 def _stable_claim_hash(claim_text: str) -> str:
@@ -177,6 +195,24 @@ def default_mock_responses() -> Dict[str, Dict]:
     """Fixture bank keyed by authorizer_name.lower(), used when no custom
     responder is supplied. Unknown names fall back to `_UNREACHABLE`."""
     return {
+        "soujas": {
+            "already_covered_by_recall": False,
+            "authorizer_statement": (
+                "No — I don't think that's right, let's hold off on that "
+                "until we've double-checked it's actually safe to remove."
+            ),
+            "direct_confirmation": "denied",
+            "call_duration_seconds": 44,
+        },
+        "@soujas": {
+            "already_covered_by_recall": False,
+            "authorizer_statement": (
+                "No — I don't think that's right, let's hold off on that "
+                "until we've double-checked it's actually safe to remove."
+            ),
+            "direct_confirmation": "denied",
+            "call_duration_seconds": 44,
+        },
         "sarah": {
             "already_covered_by_recall": False,
             "authorizer_statement": (
