@@ -447,6 +447,17 @@ class AuditLaneHandler(SimpleHTTPRequestHandler):
             raw_body = self.rfile.read(content_len).decode("utf-8")
             try:
                 payload = json.loads(raw_body)
+                # This file is what the real hook and audit_pr actually
+                # dial -- now that there's a real UI writing to it (not
+                # just hand-edited JSON), validate it same as any other
+                # real user input, not just trust the shape blindly.
+                if not isinstance(payload, dict):
+                    raise ValueError("Phonebook must be a JSON object of name -> phone number")
+                for name, phone in payload.items():
+                    if not isinstance(name, str) or not name.strip():
+                        raise ValueError("Every contact needs a non-empty name")
+                    if not isinstance(phone, str) or not phone.strip():
+                        raise ValueError(f"'{name}' has no phone number")
                 save_phonebook(payload)
                 data = json.dumps({"status": "saved"}).encode("utf-8")
                 self.send_response(200)

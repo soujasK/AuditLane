@@ -580,10 +580,13 @@
   // Render Directory — fetches the REAL phonebook.json via the backend
   // every time this view is opened, instead of the hardcoded stub data
   // `phonebook` was seeded with above (which never reflected reality).
+  let rawPhonebookData = {}; // the actual {name: phone} dict, as the backend stores it
+
   function renderDirectory() {
     fetch('/api/phonebook')
       .then(res => res.json())
       .then(data => {
+        rawPhonebookData = data;
         phonebook = Object.entries(data).map(([name, phone], i) => ({
           id: 'usr_' + i,
           name: name,
@@ -625,6 +628,7 @@
         <td><span class="badge badge-verified">${contact.status}</span></td>
         <td style="text-align: right;">
           <button class="btn btn-secondary btn-sm test-line-btn" data-contact-id="${contact.id}">Test Line</button>
+          <button class="btn btn-secondary btn-sm remove-contact-btn" data-contact-name="${escapeHtml(contact.name)}" style="margin-left: 6px; color: #e07466;">Remove</button>
         </td>
       `;
 
@@ -656,6 +660,79 @@
         const contact = phonebook.find(c => c.id === cid);
         if (contact) window.testContactLine(contact.name, contact.phone);
       });
+    });
+
+    document.querySelectorAll('.remove-contact-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const name = btn.getAttribute('data-contact-name');
+        if (!confirm(`Remove "${name}" from the directory? The gate will fail closed for anyone naming them as an authorizer afterward, same as if they were never added.`)) return;
+        const updated = { ...rawPhonebookData };
+        // Keys are stored lowercased server-side; match case-insensitively
+        // so this actually finds and removes the right entry regardless
+        // of how the name was capitalized for display.
+        const matchKey = Object.keys(updated).find(k => k.toLowerCase() === name.toLowerCase());
+        if (matchKey) delete updated[matchKey];
+        savePhonebook(updated);
+      });
+    });
+  }
+
+  function savePhonebook(updatedDict) {
+    const errEl = document.getElementById('phonebook-form-error');
+    if (errEl) errEl.style.display = 'none';
+    fetch('/api/phonebook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedDict)
+    })
+      .then(res => {
+        if (!res.ok) return res.json().then(d => { throw new Error(d.error || 'Save failed'); });
+        return res.json();
+      })
+      .then(() => renderDirectory())
+      .catch(err => {
+        if (errEl) {
+          errEl.textContent = 'Could not save: ' + err.message;
+          errEl.style.display = 'block';
+        } else {
+          alert('Could not save: ' + err.message);
+        }
+      });
+  }
+
+  // Basic E.164 sanity check: leading +, then 8-15 digits. Not a full
+  // libphonenumber-grade validator, but enough to catch the obvious
+  // mistakes (no country code, letters, missing +) before they end up
+  // in the file the real hook reads phone numbers from.
+  function isPlausibleE164(phone) {
+    return /^\+[1-9]\d{7,14}$/.test(phone.trim());
+  }
+
+  const btnAddContact = document.getElementById('btn-add-contact');
+  if (btnAddContact) {
+    btnAddContact.addEventListener('click', () => {
+      const nameInput = document.getElementById('phonebook-new-name');
+      const phoneInput = document.getElementById('phonebook-new-phone');
+      const errEl = document.getElementById('phonebook-form-error');
+      const name = nameInput.value.trim();
+      const phone = phoneInput.value.trim();
+
+      if (!name || !phone) {
+        errEl.textContent = 'Both name and phone number are required.';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (!isPlausibleE164(phone)) {
+        errEl.textContent = 'Phone number must be E.164 format: a leading + then the country code and number, digits only (e.g. +14155550192).';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      const updated = { ...rawPhonebookData, [name.toLowerCase()]: phone };
+      savePhonebook(updated);
+      nameInput.value = '';
+      phoneInput.value = '';
     });
   }
 

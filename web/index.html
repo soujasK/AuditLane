@@ -211,6 +211,22 @@
           </div>
         </div>
 
+        <div class="soc-card" style="margin-bottom: 16px;">
+          <div class="card-title">Add Contact</div>
+          <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+            <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 180px;">
+              <label class="form-label" for="phonebook-new-name">Name / alias (a phonebook.json key)</label>
+              <input type="text" id="phonebook-new-name" class="form-control" placeholder="the security lead">
+            </div>
+            <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 180px;">
+              <label class="form-label" for="phonebook-new-phone">E.164 phone number</label>
+              <input type="tel" id="phonebook-new-phone" class="form-control" placeholder="+14155550192">
+            </div>
+            <button id="btn-add-contact" class="btn btn-primary">Add Contact</button>
+          </div>
+          <div id="phonebook-form-error" style="color: #e07466; font-size: 12px; margin-top: 8px; display: none;"></div>
+        </div>
+
         <div class="table-container">
           <table class="ledger-table">
             <thead>
