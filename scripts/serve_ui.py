@@ -11,6 +11,7 @@ Serves static assets from web/ directory and provides REST endpoints:
 from __future__ import annotations
 
 import argparse
+import base64
 import functools
 import hmac
 import hashlib
@@ -258,7 +259,45 @@ class AuditLaneHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _check_auth(self) -> bool:
+        """HTTP Basic Auth gate, required for anything beyond local-only
+        use. Every endpoint here is unauthenticated by design for local
+        dev (matches how this project has always run), but this server
+        has real, spendable CALL-E credentials behind it once configured
+        for live calls -- Voice Sandbox alone lets any caller dial any
+        number. AUDITLANE_DASHBOARD_PASSWORD being unset means "local
+        machine only, trusted by definition" and skips this entirely;
+        set it before ever putting this behind a public URL.
+        """
+        required_password = os.environ.get("AUDITLANE_DASHBOARD_PASSWORD", "")
+        if not required_password:
+            return True  # no password configured -- local-only trust model, unchanged
+
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(auth_header[len("Basic "):]).decode("utf-8")
+                _, _, supplied_password = decoded.partition(":")
+            except Exception:
+                supplied_password = ""
+        else:
+            supplied_password = ""
+
+        if hmac.compare_digest(supplied_password, required_password):
+            return True
+
+        body = b"Authentication required."
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="AuditLane Dashboard"')
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return False
+
     def do_GET(self):
+        if not self._check_auth():
+            return
         split = urlsplit(self.path)
         path = split.path
         query = parse_qs(split.query)
@@ -314,6 +353,11 @@ class AuditLaneHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
+        # The GitHub webhook authenticates itself via its own HMAC
+        # signature (X-Hub-Signature-256) below, not a browser password
+        # GitHub has no way to supply -- everything else needs the gate.
+        if self.path != "/api/webhook/github" and not self._check_auth():
+            return
         if self.path == "/api/webhook/github":
             content_len = int(self.headers.get("Content-Length", 0))
             raw_body = self.rfile.read(content_len)
@@ -561,20 +605,36 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True
 
 
-def run(port: int = 8080):
+def run(port: int = 8080, host: str = "127.0.0.1"):
     if not os.path.isdir(WEB_DIR):
         print(f"Error: web directory not found at {WEB_DIR}", file=sys.stderr)
         sys.exit(1)
 
+    if host != "127.0.0.1" and not os.environ.get("AUDITLANE_DASHBOARD_PASSWORD"):
+        print(
+            "Error: refusing to bind to a non-localhost address without "
+            "AUDITLANE_DASHBOARD_PASSWORD set. Every endpoint here is open "
+            "by default (that's fine for 127.0.0.1, where only this machine "
+            "can reach it) -- binding wider than that with no password means "
+            "anyone who finds the URL can spend your real CALL-E credits via "
+            "Voice Sandbox. Set the password, or keep --host at 127.0.0.1.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     ThreadingHTTPServer.allow_reuse_address = True
     handler = functools.partial(AuditLaneHandler, directory=WEB_DIR)
-    with ThreadingHTTPServer(("127.0.0.1", port), handler) as httpd:
+    with ThreadingHTTPServer((host, port), handler) as httpd:
         print("=" * 64, flush=True)
         print(" AuditLane: Verification Ledger Web Server", flush=True)
         print("=" * 64, flush=True)
-        print(f" Local Address: http://127.0.0.1:{port}", flush=True)
+        print(f" Listening on: http://{host}:{port}", flush=True)
         print(f" Serving Directory: {WEB_DIR}", flush=True)
         print(" Connected Backend: AuditLaneVerifier Python Engine", flush=True)
+        print(
+            f" Dashboard password: {'SET (required)' if os.environ.get('AUDITLANE_DASHBOARD_PASSWORD') else 'not set (open access)'}",
+            flush=True,
+        )
         _cfg = Config.from_env()
         _key = _cfg.calle_api_key
         print(
@@ -592,5 +652,6 @@ def run(port: int = 8080):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Serve AuditLane Web UI with API")
     parser.add_argument("--port", type=int, default=8080, help="Port to listen on (default: 8080)")
+    parser.add_argument("--host", default="127.0.0.1", help="Address to bind (default: 127.0.0.1, local-only; use 0.0.0.0 for container/public deployment, which requires AUDITLANE_DASHBOARD_PASSWORD to be set)")
     args = parser.parse_args()
-    run(port=args.port)
+    run(port=args.port, host=args.host)

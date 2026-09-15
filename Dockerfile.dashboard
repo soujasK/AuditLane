@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+ENV PYTHONPATH=/app
+
+# AUDITLANE_DASHBOARD_PASSWORD must be set as a real secret at deploy
+# time (not baked into the image) -- every endpoint here is open by
+# default for local-only dev, and this is the gate that makes a public
+# deployment safe. See README.md "Deploying the dashboard" before
+# using this image anywhere but your own machine. Binding 0.0.0.0 is
+# required inside a container (127.0.0.1 would be unreachable from
+# outside it) -- serve_ui.py itself refuses to do this without the
+# password set, as a second layer, not just relying on this comment.
+EXPOSE 8080
+CMD ["sh", "-c", "python scripts/serve_ui.py --host 0.0.0.0 --port ${PORT:-8080}"]

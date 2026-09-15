@@ -198,6 +198,24 @@ Read **[docs/SAFETY.md](docs/SAFETY.md)** first — this makes real phone calls 
 
 See `action.yml` and `.github/workflows/` — runs on every PR, posts the verdict as a comment, sets a commit status. Dress rehearsal stays on until a repository variable and a secret are both explicitly set.
 
+### Deploying the dashboard
+
+By default the dashboard binds to `127.0.0.1` only — every endpoint is unauthenticated, which is fine when only this machine can reach it, but not once it's public. `scripts/serve_ui.py` **refuses to bind to any other address unless `AUDITLANE_DASHBOARD_PASSWORD` is set** — this isn't just documentation, it's an actual runtime check:
+
+```bash
+export AUDITLANE_DASHBOARD_PASSWORD=a-real-password
+python scripts/serve_ui.py --host 0.0.0.0 --port 8080
+```
+
+`Dockerfile.dashboard` runs the same thing, reading `$PORT` (the convention most hosting platforms inject) and requiring the same password:
+
+```bash
+docker build -f Dockerfile.dashboard -t auditlane-dashboard .
+docker run -p 8080:8080 -e AUDITLANE_DASHBOARD_PASSWORD=a-real-password -e CALLE_API_KEY=... auditlane-dashboard
+```
+
+Without the password set, `--host 0.0.0.0` exits immediately with an error rather than silently serving the world — deliberately fails closed, same policy as everything else here. Anyone who reaches an unprotected instance with live CALL-E credentials configured can dial any number they want through Voice Sandbox, on your account's balance — this is a real risk, not a theoretical one, treat the password as seriously as the API key itself.
+
 ## Project layout
 
 ```
