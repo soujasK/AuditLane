@@ -48,7 +48,7 @@ _PATTERNS: list[tuple[str, str, re.Pattern]] = [
 
     # -- Filesystem ---------------------------------------------------
     ("rm_rf", "Recursively force-deletes files/directories",
-     re.compile(r"\brm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*|--recursive\s+--force|--force\s+--recursive)\b")),
+     re.compile(r"\brm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*|--recursive\s+--force|--force\s+--recursive)\b|\brm\s+(?:(?:-r|--recursive)\s+(?:-f|--force)|(?:-f|--force)\s+(?:-r|--recursive))(?=\s|$)")),
     ("chmod_insecure", "Grants world-writable/insecure permissions recursively",
      re.compile(r"\bchmod\s+(-R\s+)?0?777\b")),
     ("disk_format", "Formats/overwrites a disk or partition",
